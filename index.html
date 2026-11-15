@@ -1642,9 +1642,12 @@ function drawSchematic() {
     if (hat) { const k = s.head / TAU, hd = headDims(s.head); g.strokeStyle = css('--line'); g.setLineDash([3, 4]); g.beginPath(); g.ellipse(cx, Y(0) + hd.cu * sc, k * sc, hd.cu * sc, 0, Math.PI, TAU); g.ellipse(cx, Y(0) + hd.cu * sc, k * sc, hd.cl * sc, 0, 0, Math.PI); g.stroke(); const yb = Y(0) + hd.cu * sc; g.beginPath(); g.moveTo(cx - k * sc - 10, yb); g.lineTo(cx + k * sc + 10, yb); g.stroke(); g.setLineDash([]); label('ear tops', cx + k * sc + 12, yb + 4, 'left'); label('head ' + s.head + ' cm', cx, yb + 16); }
     if (tr) { g.strokeStyle = tgt; g.globalAlpha = 0.7; for (const sg of [1, -1]) { g.beginPath(); tr.forEach((v, i) => { const x = cx + sg * v * sc, y = Y(z[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); } g.globalAlpha = 1; }
     g.fillStyle = fit; g.strokeStyle = fit;
-    for (const sg of [1, -1]) { g.beginPath(); g.moveTo(cx, Y(0)); for (let i = 0; i < c.length; i++) g.lineTo(cx + sg * r[i] * sc, Y(z[i])); g.stroke(); for (let i = 0; i < c.length; i++) { g.beginPath(); g.arc(cx + sg * r[i] * sc, Y(z[i]), D.st[i] === 'rib' ? 2.8 : 2, 0, TAU); g.fill(); } }
+    const AS = D.pasted && D.pasted.assumed || []; for (const sg of [1, -1]) { for (let i = 0; i < c.length; i++) { g.beginPath(); g.setLineDash(AS[i] ? [4, 3] : []); g.moveTo(cx + (i ? sg * r[i - 1] * sc : 0), Y(i ? z[i - 1] : 0)); g.lineTo(cx + sg * r[i] * sc, Y(z[i])); g.stroke(); } g.setLineDash([]); if (D.pasted && SHAPES.pasted.closed) { g.beginPath(); g.moveTo(cx + sg * r[c.length - 1] * sc, Y(z[c.length - 1])); g.lineTo(cx, Y(z[c.length - 1])); g.stroke(); } for (let i = 0; i < c.length; i++) { g.beginPath(); g.arc(cx + sg * r[i] * sc, Y(z[i]), D.st[i] === 'rib' ? 2.8 : 2, 0, TAU); g.fill(); } }
     const m = roundsSummary(c, D.st, D.g, s);
     label(hat ? `${r1(m.brimC)} cm around` : `${r1(m.widest / Math.PI)} cm across`, cx, h - 6);
+    if (D.pasted) { const A = D.pasted.assumed || [], nm = k => A.map((x, i) => x === k ? 'R' + (i + 1) : '').filter(Boolean).join(', '), a1 = nm('count'), a2 = nm('carry');
+      if (a1) label(`dashed: ${a1} drawn from the printed count`, 6, 28, 'left');
+      if (a2) label(`dashed: ${a2} has no printed count, kept at the round before`, 6, a1 ? 42 : 28, 'left'); }
     label(`${c.length} rounds`, 6, 14, 'left'); label(`${r1(m.depth)} cm worked`, w - 6, 14, 'right');
     return;
   }
@@ -2383,7 +2386,18 @@ Fasten off, weave the tail through the front loops and pull tight.`;
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
   const res = parsePattern(text), rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
-  const joined = rounds.some(r => r.join);
+  const joined = rounds.some(r => r.join), assumed = [];
+  // an unread round that prints a count: stand in plain stitches (even inc or dec) so the shape carries on at that count.
+  // The round stays a "needs a human" step; the schematic draws it dashed. With no printed count it stays a gap, labelled.
+  rounds.forEach((rd, i) => {
+    const G = gates[i]; if (!rd.unread || i === 0 || !G) return;
+    if (G.stated == null) { assumed[i] = 'carry'; return; } // no printed count: the reader carries the previous round's count
+    if (!(counts[i - 1] > 0)) return;
+    const p = counts[i - 1], n = Math.max(1, Math.min(G.stated, p * 2)), d = Math.min(Math.max(0, p - n), Math.floor(p / 2)), inc = Math.max(0, n - p);
+    const L = p - d, k = d || inc, pick = new Set(); for (let q = 0; q < k; q++) pick.add(Math.min(L - 1, Math.floor((q + 0.5) * L / k)));
+    rd.ops = []; for (let q = 0; q < L; q++) rd.ops.push(pick.has(q) ? (d ? 'D' : 'I') : 'S');
+    counts[i] = rd.ops.reduce((x, o) => x + produces(o), 0); assumed[i] = 'count';
+  });
   SHAPES.pasted = { label: 'Pasted pattern', closed: last <= 12 && counts.length > 3, flip: false, pts: [[0, 0], [1, 1]] };
   const det = pasteDetect(res), ov = PASTE_OV || {}, found = ov.yarn != null || det.yarn != null;
   const yarn = ov.yarn != null ? ov.yarn : det.yarn != null ? det.yarn : 4;
@@ -2391,7 +2405,7 @@ function pasteRead() {
   const spec = normalizeSpec({ item: 'ami', style: 'pasted', height: 10, yarn, hook, set: { item: true, style: true, height: true, yarn: true, hook: true } });
   spec.cal = typeof calActive === 'function' ? calActive() : null;
   const g = gaugeOf(spec);
-  PASTE = { res, gates, joined, text };
+  PASTE = { res, gates, joined, text, assumed };
   S.dirty = false; if (S.running) { S.running = false; updateGo(); }
   S.user = true; S.fit = true; S.spec = spec; S.g = g;
   showDesign({ kind: 'rounds', spec, g, counts, st: rounds.map(r => r.st || 'sc'), rounds, pasted: PASTE }, true);

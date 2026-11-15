@@ -307,9 +307,12 @@ function drawSchematic() {
     if (hat) { const k = s.head / TAU, hd = headDims(s.head); g.strokeStyle = css('--line'); g.setLineDash([3, 4]); g.beginPath(); g.ellipse(cx, Y(0) + hd.cu * sc, k * sc, hd.cu * sc, 0, Math.PI, TAU); g.ellipse(cx, Y(0) + hd.cu * sc, k * sc, hd.cl * sc, 0, 0, Math.PI); g.stroke(); const yb = Y(0) + hd.cu * sc; g.beginPath(); g.moveTo(cx - k * sc - 10, yb); g.lineTo(cx + k * sc + 10, yb); g.stroke(); g.setLineDash([]); label('ear tops', cx + k * sc + 12, yb + 4, 'left'); label('head ' + s.head + ' cm', cx, yb + 16); }
     if (tr) { g.strokeStyle = tgt; g.globalAlpha = 0.7; for (const sg of [1, -1]) { g.beginPath(); tr.forEach((v, i) => { const x = cx + sg * v * sc, y = Y(z[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); } g.globalAlpha = 1; }
     g.fillStyle = fit; g.strokeStyle = fit;
-    for (const sg of [1, -1]) { g.beginPath(); g.moveTo(cx, Y(0)); for (let i = 0; i < c.length; i++) g.lineTo(cx + sg * r[i] * sc, Y(z[i])); g.stroke(); for (let i = 0; i < c.length; i++) { g.beginPath(); g.arc(cx + sg * r[i] * sc, Y(z[i]), D.st[i] === 'rib' ? 2.8 : 2, 0, TAU); g.fill(); } }
+    const AS = D.pasted && D.pasted.assumed || []; for (const sg of [1, -1]) { for (let i = 0; i < c.length; i++) { g.beginPath(); g.setLineDash(AS[i] ? [4, 3] : []); g.moveTo(cx + (i ? sg * r[i - 1] * sc : 0), Y(i ? z[i - 1] : 0)); g.lineTo(cx + sg * r[i] * sc, Y(z[i])); g.stroke(); } g.setLineDash([]); if (D.pasted && SHAPES.pasted.closed) { g.beginPath(); g.moveTo(cx + sg * r[c.length - 1] * sc, Y(z[c.length - 1])); g.lineTo(cx, Y(z[c.length - 1])); g.stroke(); } for (let i = 0; i < c.length; i++) { g.beginPath(); g.arc(cx + sg * r[i] * sc, Y(z[i]), D.st[i] === 'rib' ? 2.8 : 2, 0, TAU); g.fill(); } }
     const m = roundsSummary(c, D.st, D.g, s);
     label(hat ? `${r1(m.brimC)} cm around` : `${r1(m.widest / Math.PI)} cm across`, cx, h - 6);
+    if (D.pasted) { const A = D.pasted.assumed || [], nm = k => A.map((x, i) => x === k ? 'R' + (i + 1) : '').filter(Boolean).join(', '), a1 = nm('count'), a2 = nm('carry');
+      if (a1) label(`dashed: ${a1} drawn from the printed count`, 6, 28, 'left');
+      if (a2) label(`dashed: ${a2} has no printed count, kept at the round before`, 6, a1 ? 42 : 28, 'left'); }
     label(`${c.length} rounds`, 6, 14, 'left'); label(`${r1(m.depth)} cm worked`, w - 6, 14, 'right');
     return;
   }

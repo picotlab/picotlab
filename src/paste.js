@@ -57,7 +57,18 @@ Fasten off, weave the tail through the front loops and pull tight.`;
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
   const res = parsePattern(text), rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
-  const joined = rounds.some(r => r.join);
+  const joined = rounds.some(r => r.join), assumed = [];
+  // an unread round that prints a count: stand in plain stitches (even inc or dec) so the shape carries on at that count.
+  // The round stays a "needs a human" step; the schematic draws it dashed. With no printed count it stays a gap, labelled.
+  rounds.forEach((rd, i) => {
+    const G = gates[i]; if (!rd.unread || i === 0 || !G) return;
+    if (G.stated == null) { assumed[i] = 'carry'; return; } // no printed count: the reader carries the previous round's count
+    if (!(counts[i - 1] > 0)) return;
+    const p = counts[i - 1], n = Math.max(1, Math.min(G.stated, p * 2)), d = Math.min(Math.max(0, p - n), Math.floor(p / 2)), inc = Math.max(0, n - p);
+    const L = p - d, k = d || inc, pick = new Set(); for (let q = 0; q < k; q++) pick.add(Math.min(L - 1, Math.floor((q + 0.5) * L / k)));
+    rd.ops = []; for (let q = 0; q < L; q++) rd.ops.push(pick.has(q) ? (d ? 'D' : 'I') : 'S');
+    counts[i] = rd.ops.reduce((x, o) => x + produces(o), 0); assumed[i] = 'count';
+  });
   SHAPES.pasted = { label: 'Pasted pattern', closed: last <= 12 && counts.length > 3, flip: false, pts: [[0, 0], [1, 1]] };
   const det = pasteDetect(res), ov = PASTE_OV || {}, found = ov.yarn != null || det.yarn != null;
   const yarn = ov.yarn != null ? ov.yarn : det.yarn != null ? det.yarn : 4;
@@ -65,7 +76,7 @@ function pasteRead() {
   const spec = normalizeSpec({ item: 'ami', style: 'pasted', height: 10, yarn, hook, set: { item: true, style: true, height: true, yarn: true, hook: true } });
   spec.cal = typeof calActive === 'function' ? calActive() : null;
   const g = gaugeOf(spec);
-  PASTE = { res, gates, joined, text };
+  PASTE = { res, gates, joined, text, assumed };
   S.dirty = false; if (S.running) { S.running = false; updateGo(); }
   S.user = true; S.fit = true; S.spec = spec; S.g = g;
   showDesign({ kind: 'rounds', spec, g, counts, st: rounds.map(r => r.st || 'sc'), rounds, pasted: PASTE }, true);
