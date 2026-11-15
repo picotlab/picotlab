@@ -1987,7 +1987,7 @@ function exNorm(raw) {
   s = ' ' + s.toLowerCase().replace(/[×✕]/g, 'x').replace(/[–—]/g, '-').replace(/[‘’“”"`]/g, ' ').replace(/\[/g, '(').replace(/\]/g, ')') + ' ';
   s = s.replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/g, w => NUMW[w])
     .replace(/\bhalf[\s-]+double(?:\s+crochets?)?\b/g, 'hdc').replace(/\bdouble\s+crochets?\b/g, 'dc').replace(/\bsingle\s+crochets?\b/g, 'sc').replace(/\b(?:treble|triple)(?:\s+crochets?)?\b/g, 'tr')
-    .replace(/\b(htr|dtr|yoh|miss)\b/g, (m, a) => { f.uk.add(a); return a === 'htr' ? ' hdc ' : a === 'miss' ? ' skip ' : ' '; })
+    .replace(/\bsk\b/g, ' skip ').replace(/\b(?:magic|adjustable)\s+(?:ring|circle|loop)\b|\bmr\b/g, ' ring ').replace(/\b(htr|dtr|yoh|miss)\b/g, (m, a) => { f.uk.add(a); return a === 'htr' ? ' hdc ' : a === 'miss' ? ' skip ' : ' '; })
     .replace(/(\d)(?=(?:sc|hdc|dc|tr|ch)\b)/g, '$1 ').replace(/\bch(?=\d)/g, 'ch ')
     .replace(/\b(sc|hdc|dc|tr)\s*(\d)\s*-?\s*tog(?:ether)?\b/g, ' dec_$1$2 ').replace(/\b(?:inv(?:isible)?\s*)?dec(?:rease)?s?\b/g, ' dec_sc2 ').replace(/\binc(?:rease)?s?\b/g, ' inc ')
     .replace(/\b(?:sl(?:ip)?\s*st(?:itch(?:es)?)?s?|ss)\b/g, ' ss ')
@@ -2011,7 +2011,7 @@ function exNorm(raw) {
 function exTarget(T, f) { // after "in"/"into"/"over": where the hook goes
   const tk = T.tok, isN = t => t != null && /^\d+$/.test(t);
   let loop = null;
-  while (tk[T.i] === 'the' || tk[T.i] === 'each' && tk[T.i + 1] === 'of' || tk[T.i] === 'of' || /^LOOP[FB]$/.test(tk[T.i] || '')) { if (/^LOOP/.test(tk[T.i])) loop = tk[T.i] === 'LOOPF' ? 'front' : 'back'; T.i += tk[T.i] === 'each' ? 2 : 1; }
+  while (tk[T.i] === 'the' || tk[T.i] === 'a' || tk[T.i] === 'an' || tk[T.i] === 'each' && tk[T.i + 1] === 'of' || tk[T.i] === 'of' || /^LOOP[FB]$/.test(tk[T.i] || '')) { if (/^LOOP/.test(tk[T.i])) loop = tk[T.i] === 'LOOPF' ? 'front' : 'back'; T.i += tk[T.i] === 'each' ? 2 : 1; }
   const w = tk[T.i], out = { to: null, kind: 'st', n: 1, loop };
   const kindAt = () => { let k = 'st', sp = null; while (tk[T.i] != null) { const t = tk[T.i]; if (/^SP\d+$/.test(t)) { k = 'sp'; sp = +t.slice(2) || null; } else if (t === 'CSP') k = 'csp'; else if (/^(?:st|sts|stitch|stitches|sc|dc|hdc|tr)$/.test(t)) { if (k === 'st') k = t === 'sc' || t === 'dc' || t === 'hdc' || t === 'tr' ? t : 'st'; } else if (t === 'ch' || t === 'chs' || t === 'chain' || t === 'chains') k = 'ch'; else if (t === 'shell' || t === 'shells') k = 'shell'; else if (t === 'between') { out.between = true; const w = []; T.i++; while (tk[T.i] != null && !/^[,;.)]$/.test(tk[T.i]) && !/^§/.test(tk[T.i])) { w.push(tk[T.i] === 'TCH' ? 'turning chain' : /^SP\d+$/.test(tk[T.i]) ? (+tk[T.i].slice(2) ? 'ch-' + tk[T.i].slice(2) + ' space' : 'space') : tk[T.i] === 'CSP' ? 'corner space' : tk[T.i]); T.i++; } out.betweenText = w.join(' '); break; } else if (t === 'LOOPF' || t === 'LOOPB') out.loop = t === 'LOOPF' ? 'front' : 'back'; else break; T.i++; }
     out.kind = k; if (sp) out.sp = sp; };
@@ -2072,8 +2072,8 @@ function exParse(s) {
         out.push(nd); continue;
       }
       if (n != null) { T.i++; continue; }
-      if (t === 'inc') { T.i++; let tg = null; if (tok[T.i] === 'in' || tok[T.i] === 'into') { T.i++; tg = exTarget(T); } out.push({ t: 'st', op: null, n: 2, tgt: tg || { to: 'next', kind: 'st', n: 1 }, inc: true }); continue; }
-      if (/^dec_/.test(t)) { T.i++; let tg = null; if (tok[T.i] === 'over' || tok[T.i] === 'in' || tok[T.i] === 'into') { T.i++; tg = exTarget(T); } out.push({ t: 'dec', op: t.slice(4, -1), n: +t.slice(-1), tgt: tg }); continue; }
+      if (t === 'inc') { T.i++; let tg = null; if (tok[T.i] === 'in' || tok[T.i] === 'into') { T.i++; tg = exTarget(T); } else if (/^(?:around|across|end)$/.test(tok[T.i] || '')) { T.i++; tg = { to: 'fill', kind: 'st', n: 1 }; } const nd = { t: 'st', op: null, n: 2, tgt: tg || { to: 'next', kind: 'st', n: 1 }, inc: true }; if (!tg && tok[T.i] === 'x' && isN(tok[T.i + 1])) { out.push({ t: 'rep', items: [nd], spec: { times: +tok[T.i + 1] } }); T.i += 2; } else out.push(nd); continue; }
+      if (/^dec_/.test(t)) { T.i++; let tg = null; if (tok[T.i] === 'over' || tok[T.i] === 'in' || tok[T.i] === 'into') { T.i++; tg = exTarget(T); } else if (/^(?:around|across|end)$/.test(tok[T.i] || '')) { T.i++; tg = { to: 'fill', kind: 'st', n: 1 }; } const nd = { t: 'dec', op: t.slice(4, -1), n: +t.slice(-1), tgt: tg }; if (!tg && tok[T.i] === 'x' && isN(tok[T.i + 1])) { out.push({ t: 'rep', items: [nd], spec: { times: +tok[T.i + 1] } }); T.i += 2; } else out.push(nd); continue; }
       if (t === 'ch') { T.i++; let m = 1; if (isN(tok[T.i])) { m = +tok[T.i]; T.i++; } let counts = null; if (tok[T.i] === 'COUNTS') { counts = true; T.i++; } else if (tok[T.i] === 'NOCOUNT') { counts = false; T.i++; } out.push({ t: 'ch', n: m, counts }); continue; }
       if (t === 'skip') { T.i++; while (tok[T.i] === 'the' || tok[T.i] === 'next' || tok[T.i] === 'each' || tok[T.i] === 'of' || tok[T.i] === 'first') T.i++; let m = 1; if (isN(tok[T.i])) { m = +tok[T.i]; T.i++; } let kind = 'st', shell = false; const u = tok[T.i]; if (/^(?:st|sts|stitch|stitches|sc|dc|hdc|tr|ch|chs|SP\d+|CSP|shells?)$/.test(u || '')) { if (/^SP|^CSP/.test(u)) kind = 'sp'; if (/^chs?$/.test(u)) kind = 'ch'; if (/^shells?$/.test(u)) shell = true; T.i++; } out.push({ t: 'sk', n: m, kind, shell }); continue; }
       if (t === 'ss') { T.i++; let m = 1; if (isN(tok[T.i])) { m = +tok[T.i]; T.i++; } let tg = null; if (tok[T.i] === 'in' || tok[T.i] === 'into' || tok[T.i] === 'to') { T.i++; tg = exTarget(T); } if (tg && tg.to === 'each') m = tg.n; out.push({ t: 'ss', n: m, tgt: tg }); continue; }
@@ -2146,8 +2146,9 @@ function exFlat(parts, out = []) { for (const p of parts) { out.push(p); if (p.i
 function explain(text) {
   const raw = String(text == null ? '' : text).trim(), res = { input: raw, kind: 'empty', terms: [], parts: [], count: null, hooks: [], uk: [], warnings: [], understood: [], unrecognised: [], needsHuman: false, needs: null, text: '' };
   if (!raw) { res.needsHuman = true; res.needs = 'Paste a term, an abbreviation or one line of the pattern.'; res.text = res.needs; return res; }
-  res.terms = exTerms(raw);
-  const body = exStrip(raw), { s, f } = exNorm(body), P = exParse(s), flat = exFlat(exRender(P.nodes));
+  const body = exStrip(raw);
+  res.terms = exTerms(raw).filter(t => t.id !== 'brackets' || /[(\[]/.test(body));
+  const { s, f } = exNorm(body), P = exParse(s), flat = exFlat(exRender(P.nodes));
   res.parts = exRender(P.nodes);
   const hasStitch = nd => nd.some(n => n.t !== 'turn' && n.t !== 'join'), words = raw.replace(/[^a-z0-9]+/gi, ' ').trim().split(' ').length;
   const termOnly = res.terms.length > 0 && (!P.nodes.length || (words <= 3 && !/\d/.test(raw)));
@@ -2157,10 +2158,13 @@ function explain(text) {
   // the count: what the line makes, and the printed count if there is one
   const stated = statedCountOf(raw) != null ? statedCountOf(raw) : (workCount(raw) ? workCount(raw).reduce((a, p) => a + p.n, 0) : null);
   if (res.kind === 'line' && P.nodes.length) {
-    const c = exCount(P.nodes, false), c2 = exCount(P.nodes, true);
-    res.count = { made: c.ok ? c.made : null, chains: c.ok ? c.chains : null, used: c.ok ? c.used : null, exact: c.ok, alt: c.ok && (c2.made !== c.made || c2.chains !== c.chains) ? { made: c2.made, chains: c2.chains } : null, stated, agrees: null };
+    const c = exCount(P.nodes, false), c2 = exCount(P.nodes, true), n0 = P.nodes[0], n1 = P.nodes[1];
+    /* a short opening chain before the stitches ("ch 3, (3 dc, ch 2) x3 in ring") is the beginning chain: not a chain space, and the line does not say if it stands for a stitch */
+    const lead = n0 && n0.t === 'ch' && n0.counts == null && n0.n <= 4 && n1 && /^(?:st|grp|rep)$/.test(n1.t) ? n0.n : 0;
+    if (lead) for (const q of [c, c2]) { q.chains -= lead; q.sps -= 1; }
+    res.count = { lead: lead || null, made: c.ok ? c.made : null, chains: c.ok ? c.chains : null, used: c.ok ? c.used : null, exact: c.ok, alt: c.ok && (c2.made !== c.made || c2.chains !== c.chains) ? { made: c2.made, chains: c2.chains } : null, stated, agrees: null };
     if (!c.ok) res.count.note = 'The count depends on how many stitches or spaces your row or round has (a repeat "to end" or a fill across), so it cannot be worked out from this line alone.';
-    if (stated != null && c.ok) { const ok1 = [c.made, c.made + c.chains, c.made + c.sps].includes(stated), ok2 = c2.ok && [c2.made, c2.made + c2.chains, c2.made + c2.sps].includes(stated); res.count.agrees = ok1 || ok2; if (!res.count.agrees) res.warnings.push(`The printed count is ${stated}, but this line makes ${c.made} stitches and ${c.chains} chains: they disagree. Check the line for a missing part, or whether the count includes chains or spaces.`); else if (!ok1 && ok2) res.warnings.push(`The printed count ${stated} matches only if "rep ... N times" means N times in all, not N more.`); else if (stated !== c.made) res.warnings.push(`The printed count ${stated} matches only if ${stated === c.made + c.sps ? 'each chain space is counted as one stitch' : 'chains are counted as stitches'}; the line makes ${c.made} stitches and ${c.chains} chains in ${c.sps} chain run${c.sps === 1 ? '' : 's'}. Confirm that is how this pattern counts.`); }
+    if (stated != null && c.ok) { const alts = q => (lead ? [q.made, q.made + q.chains, q.made + q.sps, q.made + 1, q.made + 1 + q.sps] : [q.made, q.made + q.chains, q.made + q.sps]), ok1 = alts(c).includes(stated), ok2 = c2.ok && alts(c2).includes(stated); res.count.agrees = ok1 || ok2; if (!res.count.agrees) res.warnings.push(`The printed count is ${stated}, but this line makes ${c.made} stitches and ${c.chains} chains${lead ? ' (plus an opening ch ' + lead + ')' : ''}: they disagree. Check the line for a missing part, or whether the count includes chains or spaces.`); else if (!ok1 && ok2) res.warnings.push(`The printed count ${stated} matches only if "rep ... N times" means N times in all, not N more.`); else if (stated !== c.made) res.warnings.push(`The printed count ${stated} matches only if ${stated === c.made + c.sps ? 'each chain space is counted as one stitch' : stated === c.made + 1 || stated === c.made + 1 + c.sps ? 'the opening ch ' + lead + ' stands for a stitch' + (stated === c.made + 1 + c.sps ? ' and each chain space counts as one' : '') : 'chains are counted as stitches'}; the line makes ${c.made} stitches and ${c.chains} chains in ${c.sps} chain run${c.sps === 1 ? '' : 's'}. Confirm that is how this pattern counts.`); }
     if (f.label && f.label.b > f.label.a) res.count.rows = f.label.b - f.label.a + 1;
   }
   if (f.label && /^(?:work|working|continue)?\s*even/i.test(raw.replace(/^[^:]*:\s*/, '')) && f.label.b >= f.label.a) res.count = Object.assign(res.count || {}, { rows: f.label.b - f.label.a + 1, made: null, exact: false, note: `${f.label.b - f.label.a + 1} ${f.label.kind === 'row' ? 'row' : 'round'}${f.label.b > f.label.a ? 's' : ''} with no change in the stitch count: every row has the same number of stitches as the one before.` });
@@ -2172,7 +2176,7 @@ function explain(text) {
   if (f.uk.size) res.warnings.push(`UK term${f.uk.size > 1 ? 's' : ''} found (${[...f.uk].join(', ')}): this pattern is probably in UK terms, so a dc here is a US sc. The stitch names above would be wrong; read them with the UK chart.`);
   if (/\bss\b/i.test(raw)) res.uk.push('"ss" is a slip stitch in both UK and US patterns; US ones often write "sl st".');
   // checks that make it fail loud
-  if (/(?:[,;]|\b(?:work|in|into|then|and|to|of|the|next|skip|across|with)\s*)$/i.test(raw.replace(/[.\s]+$/, ' ').trim() + ' ') && res.kind === 'line') res.warnings.push('The line looks cut off at the end: paste the whole line to get the rest.');
+  if (/(?:[,;]|\b(?:work|in|into|then|and|to|of|the|next|skip|with)\s*)$/i.test(raw.replace(/[.\s]+$/, ' ').trim() + ' ') && res.kind === 'line') res.warnings.push('The line looks cut off at the end: paste the whole line to get the rest.');
   const cutOff = res.warnings.some(w => /cut off/.test(w));
   const unk = P.unknown.filter(u => !(res.terms.some(t => t.id === 'chsp') && /^sp$/.test(u)));
   res.unrecognised = unk;
@@ -2193,7 +2197,7 @@ function explain(text) {
   {
     const walk = (ps, ind) => { for (const p of ps) { L.push(`${ind}- ${p.say}${p.hook ? ' → hook goes into ' + p.hook : ''}`); if (p.items) walk(p.items, ind + '  '); } };
     if (flat.length) { L.push('This line, step by step:'); walk(res.parts, ''); }
-    if (res.count) { const c = res.count; const bits = []; if (c.exact && c.made != null) bits.push(`${c.made} stitch${c.made === 1 ? '' : 'es'}${c.chains ? ' and ' + c.chains + ' chain' + (c.chains === 1 ? '' : 's') : ''} made${c.used ? ', using ' + c.used + ' stitch' + (c.used === 1 ? '' : 'es') + ' or space' + (c.used === 1 ? '' : 's') + ' of the row below' : ''}`); if (c.alt) bits.push(`(${c.alt.made} stitches and ${c.alt.chains} chains if "N times" means N in all)`); if (c.note) bits.push(c.note); if (c.stated != null) bits.push(`printed count ${c.stated}${c.agrees === true ? ': matches' : c.agrees === false ? ': DOES NOT match' : ''}`); if (c.rows && !c.note) bits.push(`${c.rows} rows`); if (c.total) bits.push(`the pattern asks for a total of ${c.total.n}${c.total.what ? ' ' + c.total.what : ''}`); if (bits.length) L.push('Count: ' + bits.join('; ')); }
+    if (res.count) { const c = res.count; const bits = []; if (c.exact && c.made != null) bits.push(`${c.made} stitch${c.made === 1 ? '' : 'es'}${c.chains ? ' and ' + c.chains + ' chain' + (c.chains === 1 ? '' : 's') : ''}${c.lead ? ' (plus an opening ch ' + c.lead + ')' : ''} made${c.used ? ', using ' + c.used + ' stitch' + (c.used === 1 ? '' : 'es') + ' or space' + (c.used === 1 ? '' : 's') + ' of the row below' : ''}`); if (c.alt) bits.push(`(${c.alt.made} stitches and ${c.alt.chains} chains if "N times" means N in all)`); if (c.note) bits.push(c.note); if (c.stated != null) bits.push(`printed count ${c.stated}${c.agrees === true ? ': matches' : c.agrees === false ? ': DOES NOT match' : ''}`); if (c.rows && !c.note) bits.push(`${c.rows} rows`); if (c.total) bits.push(`the pattern asks for a total of ${c.total.n}${c.total.what ? ' ' + c.total.what : ''}`); if (bits.length) L.push('Count: ' + bits.join('; ')); }
   }
   for (const w of res.warnings) L.push('Warning: ' + w);
   if (res.uk.length) L.push('US/UK: ' + res.uk.join(' '));
@@ -2225,7 +2229,7 @@ function checkPattern(text) {
   const flagged = [];
   lines.forEach((ln, i) => {
     const body = ln.replace(/^(?:rows?|r(?:nd|ound)s?|r)\.?\s*\d+(?:\s*[-–—]\s*(?:rows?|r(?:nd|ound)s?|r)?\.?\s*\d+)?\s*(?:\([^)]*\))?\s*[:.)]?\s*/i, '');
-    if (!/\d|\bch\b|\bsc\b|\bdc\b|\bss\b|\bsl\b|\bskip\b|\bturn\b/i.test(body)) return;
+    if (!/\b(?:sc|hdc|dc|tr|ch|ss|sl|sk|skip|inc|dec|rep|repeat|turn|join|(?:sc|hdc|dc)2tog)\b|\*/i.test(body) || /^(?:yarn|hook|gauge|tension|size|sizes|materials?|notes?|abbreviations?|finished|difficulty|skill|designer|stitch(?:es)?|special)\b[^:]{0,30}:/i.test(ln)) return;
     const e = explain(ln);
     if (e.unrecognised.length) { add('info', `“${ln.slice(0, 60)}”: words not understood by the explainer (${e.unrecognised.join(', ')}); understood: ${e.understood.join(', ') || 'nothing'}.`, i); flagged.push({ line: i, text: ln, explain: e }); }
     if (e.count && e.count.stated != null && e.count.agrees === false) add('warn', `“${ln.slice(0, 60)}”: the printed count ${e.count.stated} does not match what the line makes (${e.count.made} stitches, ${e.count.chains} chains).`, i);
