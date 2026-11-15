@@ -26,7 +26,8 @@ function styleList(s) {
 function renderFields() {
   const s = S.spec, f = $('fields'), g = S.g, set = S.raw.set || {};
   $('specSec').style.display = s.style === 'pasted' ? 'none' : ''; // a pasted pattern has its own yarn/hook pickers by the paste box
-  if (s.style === 'pasted') { f.innerHTML = ''; return; }
+  $('optSec').style.display = s.style === 'pasted' ? 'none' : ''; $('optNote').hidden = s.style !== 'pasted'; // search would replace the pasted pattern
+  if (s.style === 'pasted') { if (S.running) { S.running = false; S.dirty = false; updateGo(); } f.innerHTML = ''; return; }
   const cls = k => set[k] ? ' class="from"' : '';
   const sel = (k, label, opts, val, wide) => `<label${wide ? ' class="wide"' : ''}><span${cls(k)}>${label}</span><select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
   const num = (k, label, val, step = 0.5, ph = '') => `<label><span${cls(k)}>${label}</span><input type="number" data-k="${k}" step="${step}" min="0" value="${val == null ? '' : val}" placeholder="${ph}"></label>`;
