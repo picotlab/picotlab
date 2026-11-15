@@ -1229,8 +1229,15 @@ function workRow(nodes, below, opts = {}) {
             run(nd.items);
             const remain = (() => { let r = 0; for (let q = S.c; q < S.below.length; q++) if (isSt(S.below[q])) r++; return r; })();
             if (S.short > JSON.parse(snap)[5] || remain < leave) {
+              const ranOut = S.short > JSON.parse(snap)[5];
               const v = JSON.parse(snap); S.c = v[0]; S.last = v[1]; S.firstSp = v[2]; S.units = unitsCopy; S.acts.length = a0; S.short = v[5]; pendingSkip = v[6]; S.started = v[7]; S.below = bl;
               if (lastSp != null) S.units[S.units.length - 1].n = lastSp;
+              if (ranOut && opts.round && !ring && nd.items.length > 1) { /* a round that ends part-way through its unit: keep the parts of the last repeat that still fit, up to the one that runs out of spaces */
+                const mk = () => { const w = JSON.stringify([S.c, S.last, S.firstSp, S.units.length, S.acts.length, S.short, pendingSkip, S.started]), uc = S.units.slice(), ln = S.units[S.units.length - 1] && S.units[S.units.length - 1].k === 'sp' ? S.units[S.units.length - 1].n : null; return () => { const q = JSON.parse(w); S.c = q[0]; S.last = q[1]; S.firstSp = q[2]; S.units = uc; S.acts.length = q[4]; S.short = q[5]; pendingSkip = q[6]; S.started = q[7]; if (ln != null) S.units[S.units.length - 1].n = ln; }; };
+                const base = mk(); let consumed = false, kept = 0;
+                for (const it of nd.items) { const undo = mk(), sh = S.short; run([it]); if (S.short > sh) { undo(); break; } kept++; if (/^(?:st|grp|sk|sl)$/.test(it.t)) consumed = true; }
+                if (!consumed) base(); else if (nodes.indexOf(nd) === nodes.length - 1) S.warn.push(`the last repeat stops part-way: only the first ${kept} of ${nd.items.length} parts of the repeated unit still fit, and nothing follows to finish the round.`);
+              }
               break;
             }
             if (ring && k > 40) break;
@@ -1435,7 +1442,8 @@ function patternKind(text) {
   const ringy = /\b(?:magic\s+(?:ring|circle|loop)|adjustable\s+ring|\bmr\b|in(?:to)?\s+(?:the\s+)?ring|form\s+a\s+ring)\b/i.test(t);
   const spaces = (t.match(/\bch[\s-]*\d*[\s-]*sp\b|\bsp(?:ace)?s?\b|\bcorner/gi) || []).length;
   const groups = /\bch\s*\d+\s*,\s*(?:\d+\s*dc|dc\s*\d+)\s+in(?:to)?\s+(?:the\s+)?(?:same|ring|base|magic)/i.test(t);
-  if (rndL >= rowsL && (groups || spaces >= 2 && (ringy || /\bcorner|granny/i.test(t) || /from\s+(?:the\s+)?hook/i.test(t)))) return 'granny';
+  const ringGroup = /[(\[]\s*\d+\s*(?:dc|hdc|tr)\s*(?:in(?:to)?\s+(?:the\s+)?(?:ring|loop)\s*)?,\s*ch\s*\d+\s*[)\]]\s*(?:x\s*\d+|\d+\s*times)/i.test(t);
+  if (rndL >= rowsL && (groups || ringGroup || spaces >= 2 && (ringy || /\bcorner|granny/i.test(t) || /from\s+(?:the\s+)?hook/i.test(t)))) return 'granny';
   const found = /^\s*(?:foundation\s*[:.-]?\s*)?ch(?:ain)?\s*\d+/im.test(t) || /^\s*rows?\s*1\b[^\n]*\b(?:from\s+(?:the\s+)?hook|turn)\b/im.test(t);
   if (rowsL > rndL && found && !ringy) return 'rows';
   return 'rounds';
@@ -2152,7 +2160,7 @@ function checkPattern(text) {
   // 2. flat versus ring
   if (P.kind === 'rounds' && (rowL > 0 && rowL >= rndL || turns && !ringy && rowL + rndL > 0)) add('human', 'This reads as rounds in a ring, but the text says "row" and/or "turn", which means a flat piece worked back and forth. Not trusted: the steps would be wrong.');
   if (P.kind === 'rounds' && !ringy && /\bturn\b/i.test(raw)) add('human', 'Found "turn" with no ring: rows are turned, so this is flat, not a ring.');
-  if (P.kind === 'rounds') lines.forEach((ln, i) => { if (/\b(?:sc|hdc|dc|tr)\b[^;.]*?,\s*ch\s*\d+\s*,?\s*(?:\(|\*|\d*\s*(?:sc|hdc|dc|tr)\b)/i.test(ln)) add('human', `“${ln.slice(0, 60)}”: a chain between stitches makes a space, which the round reader drops. Not trusted for steps.`, i); });
+  if (P.kind === 'rounds') lines.forEach((ln, i) => { if (/\b(?:sc|hdc|dc|tr)\b[^;.]*?,\s*ch\s*\d+\s*,?\s*(?:\(|\*|\d*\s*(?:sc|hdc|dc|tr)\b)/i.test(ln)) add('human', `“${ln.slice(0, 60)}”: a chain between stitches makes a space, which the round reader drops, so its steps lose the structure of the line${(() => { const ex = explain(ln); return ex.count && ex.count.stated != null && ex.count.agrees === true ? ` (the printed count ${ex.count.stated} agrees with the explainer's reading, so use the explanation, not the steps)` : ''; })()}. Not trusted for steps.`, i); });;
   // 3. groups and spaces need a reader that knows them
   if (P.kind === 'rounds' && groupsIn) add('human', 'Bracketed groups worked into one stitch or space (for example "(3 dc, ch 2, 3 dc) in next corner sp") were found. The round reader would read them as single stitches. Not trusted.');
   if (P.kind === 'rounds' && spaceWords) add('human', 'Chain spaces, corners or shells were found, which the round reader does not model. Not trusted for steps.');
