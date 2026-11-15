@@ -59,9 +59,52 @@ R5: (sc, dec) x6 [12]
 Stuff the ball firmly.
 R6: dec x6 [6]
 Fasten off, weave the tail through the front loops and pull tight.`;
+// "Read 6 rounds: 5 match their printed count." Clauses with a zero are left out.
+function pasteTally(total, n, noun = 'round') {
+  const parts = [];
+  if (n.ok) parts.push(`<b>${n.ok}</b> match their printed count`);
+  if (n.bad) parts.push(`<b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not`);
+  if (n.none) parts.push(`${n.none} print${n.none === 1 ? 's' : ''} no count`);
+  return `Read ${total} ${noun}${total === 1 ? '' : 's'}${parts.length ? ': ' + parts.join(', ') : ''}.`;
+}
+// a rows or granny paste: the reader's rows (or rounds) become count gates, the flat or granny model drives the 3D view
+function flatGates(P) {
+  return (P.kind === 'rows' ? P.rows : P.rounds).map(r => {
+    const rows = P.kind === 'rows', status = r.unread ? 'human' : r.stated == null ? 'none' : r.countAs ? 'ok' : 'bad';
+    return { line: r.line == null ? -1 : r.line, label: rows ? (r.row ? `Row ${r.row}` : 'Foundation') : `Rnd ${r.r}`, stated: r.stated, got: status === 'ok' ? r.stated : r.got, status, key: rows ? r.row : r.r - 1 };
+  });
+}
+function pasteReadFlat(P, text) {
+  const gates = flatGates(P), rows = P.kind === 'rows', noun = rows ? 'row' : 'round';
+  const det = pasteDetect(P), ov = PASTE_OV || {}, found = ov.yarn != null || det.yarn != null;
+  const yarn = ov.yarn != null ? ov.yarn : det.yarn != null ? det.yarn : 4;
+  const hook = ov.hook || det.hook || YARN[yarn].hook;
+  const spec = normalizeSpec({ item: 'blanket', style: 'pasted', yarn, hook, set: { item: true, yarn: true, hook: true } }); // a box sized to the piece: a scarf's 55 cm rod would dwarf a washcloth
+  spec.style = 'pasted'; spec.cal = typeof calActive === 'function' ? calActive() : null;
+  const g = gaugeOf(spec);
+  PASTE = { res: P, gates, joined: false, text, assumed: [], kind: P.kind };
+  S.dirty = false; if (S.running) { S.running = false; updateGo(); }
+  S.user = true; S.fit = true; S.spec = spec; S.g = g;
+  showDesign(Object.assign({}, P, { spec, g, pasted: PASTE }), true);
+  if (typeof renderFields === 'function') renderFields();
+  $('pattern').value = text; $('warns').innerHTML = P.warns.map(w => `<div>${esc(w)}</div>`).join('');
+  $('pieceTitle').textContent = 'Pasted pattern'; $('patNote').textContent = rows ? 'turned rows' : 'granny rounds';
+  const n = { ok: 0, bad: 0, none: 0, human: 0 }; gates.forEach(G => n[G.status]++);
+  const humanSet = new Set(); gates.forEach(G => { if (G.status === 'human') humanSet.add(G.line >= 0 ? G.line : 'g' + G.key); }); P.lines.forEach((l, i) => { if (l.status === 'unread') humanSet.add(i); });
+  const humanLines = humanSet.size, humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.`;
+  $('pasteNote').innerHTML = `${pasteTally(gates.length, n, noun)} ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  pasteSetFill(yarn, hook);
+  $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
+  updateGo('your pattern');
+  W.playing = false; $('wPlay').textContent = 'Play';
+  if (!W.on) walkToggle(true); else { W.i = 0; walkSetup(); }
+  if (window.innerWidth < 1060) $('mat').scrollIntoView({ block: 'start' });
+}
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
-  const res = parsePattern(text), rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
+  const P0 = typeof readPattern === 'function' ? readPattern(text) : parsePattern(text);
+  if (P0.kind === 'rows' || P0.kind === 'granny') return pasteReadFlat(P0, text);
+  const res = P0, rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
   const joined = rounds.some(r => r.join), assumed = [];
   // an unread round that prints a count: stand in plain stitches (even inc or dec) so the shape carries on at that count.
   // The round stays a "needs a human" step; the schematic draws it dashed. With no printed count it stays a gap, labelled.
@@ -92,7 +135,7 @@ function pasteRead() {
   const looseLines = res.lines.filter(l => l.status === 'unread').length, humanLines = n.human + looseLines; // a round line the reader found no stitches in counts too
   const standIn = assumed.filter(x => x === 'count').length, carried = assumed.filter(x => x === 'carry').length;
   const humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human${standIn ? `, ${standIn === 1 ? 'one' : standIn} drawn from ${standIn === 1 ? 'its' : 'their'} printed count` : ''}${carried ? `, ${carried === 1 ? 'one' : carried} kept at the round before` : ''}.`;
-  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  $('pasteNote').innerHTML = `${pasteTally(counts.length, n)} ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
   pasteSetFill(yarn, hook);
   $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
   updateGo('your pattern');
@@ -106,6 +149,18 @@ function pasteRead() {
 function pastedSteps(D) {
   const P = D.pasted, out = [], clip = t => (t.length > 140 ? t.slice(0, 140) + '…' : t);
   const lineIdx = t => P.res.lines.findIndex(l => l.status === 'unread' && l.text === t);
+  if (D.kind === 'rows' || D.kind === 'granny') { // rows and granny steps carry their own line; the gate sits at the end of each row or round
+    const rows = D.kind === 'rows', list = rows ? D.rows : D.rounds;
+    for (const s of walkSteps(D)) {
+      const key = s.kind === 'row' ? s.row : s.kind === 'granny' ? s.r : -1, G = P.gates.find(x => x.key === key), ent = list.find((x, i) => P.gates[i] && P.gates[i].key === key);
+      if (s.op === 'unread') { s.human = true; if (s.line == null || s.line < 0) { const li = lineIdx(s.text); s.line = li >= 0 ? li : G ? G.line : -1; } s.label = `Needs a human: “${clip(s.text)}” (${s.why}). Read it yourself, then step on.`; out.push(s); continue; }
+      if (ent && ent.unread) continue;
+      if (s.line == null) s.line = G ? G.line : -1;
+      if (G && s.made === s.of && s.of > 0 && s.op !== 'ch' && s.op !== 'slst') s.label += ` · ${gateText(G)}`;
+      out.push(s);
+    }
+    out.forEach((s, i) => (s.i = i)); return out;
+  }
   for (const s of walkSteps({ kind: 'rounds', spec: { item: 'ami' }, rounds: D.rounds })) {
     const rd = D.rounds[s.r], G = P.gates[s.r];
     if (s.op === 'unread') { const li = lineIdx(s.text); s.human = true; s.line = li >= 0 ? li : G ? G.line : -1; s.label = `Needs a human: “${clip(s.text)}” (${s.why}). Read it yourself, then step on.`; out.push(s); continue; }

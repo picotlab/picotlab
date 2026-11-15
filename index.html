@@ -909,7 +909,7 @@ function parsePattern(text) {
   for (const raw of String(text).split(/\n/)) {
     const s = raw.trim(); if (!s) continue;
     const m = s.match(LBL), last = entries[entries.length - 1];
-    if (m) { entries.push({ a: +m[1], b: m[2] ? +m[2] : +m[1], st: m[3] ? m[3].toLowerCase() : null, body: m[4], text: s, after: [] }); lines.push({ text: s, status: 'round' }); continue; }
+    if (m) { entries.push({ a: +m[1], b: m[2] ? +m[2] : +m[1], st: m[3] ? m[3].toLowerCase() : null, body: m[4], text: s, after: [], li: lines.length }); lines.push({ text: s, status: 'round' }); continue; }
     if (last && !last.after.length && !NOTE_RE.test(s) && STV_RE.test(s) && statedCountOf(last.body) == null) { /* a round with no printed count yet is still open */ last.body += ' ' + s; last.text += '\n' + s; lines.push({ text: s, status: 'merged' }); continue; }
     if (NOTE_RE.test(s) || !STV_RE.test(s)) { lines.push({ text: s, status: 'note' }); continue; }
     const u = { text: s, why: 'not a round line this reader knows' };
@@ -947,6 +947,7 @@ function parsePattern(text) {
       const got = rd.mr || rd.ops.reduce((x, o) => x + produces(o), 0);
       if (stated != null && stated !== got) w.push(`stated [${stated}] but the stitches make ${got}.`);
       if (w.length) rd.warn = w;
+      rd.stated = stated; rd.line = e.li; /* the printed count (null if none) and the index in `lines` of the entry's first line */
       w.forEach(x => warns.push(`${tag}: ${x}`));
       rounds.push(rd);
       prev = stated != null ? stated : got; // a wrong line is flagged, and the next line is read against the printed count
@@ -955,7 +956,534 @@ function parsePattern(text) {
   }
   if (!rounds.length) rounds.push({ mr: 6, st: 'sc' });
   if (pre.length) rounds[0].before = pre;
-  return { rounds, warns, unread, lines };
+  return { kind: 'rounds', rounds, warns, unread, lines };
+}
+
+// ---------- rows and granny rounds: stitches worked into the units of the row (or round) below ----------
+// The row below is a list of units: a stitch {k:'st'}, a foundation chain {k:'ch'}, a chain space {k:'sp', n, corner}, or the ring {k:'ring'}.
+// A line is read into nodes (stitches with a target, chains, skips, groups worked into one unit, repeats), then worked into those units.
+const WOPS = new Set(['sc', 'hdc', 'dc', 'tr', 'stdc', 'fpdc', 'bpdc', 'fpsc', 'bpsc']);
+const CNT_UNIT = { st: 'st', sts: 'st', stitch: 'st', stitches: 'st', sc: 'st', hdc: 'st', dc: 'st', tr: 'st', ch: 'ch', chs: 'ch', chain: 'ch', chains: 'ch', sp: 'sp', sps: 'sp', space: 'sp', spaces: 'sp', cl: 'cl', clusters: 'cl', cluster: 'cl', groups: 'cl', group: 'cl', shells: 'cl', shell: 'cl', vst: 'cl', vsts: 'cl', corners: 'corner', corner: 'corner' };
+// the printed count of a row or granny round, with its unit: (26), [21], (=20 st), — 31 dc, (12 dc, 4 ch-2 sps), (8 clusters)
+function workCount(text) {
+  const t = String(text).toLowerCase().replace(/[–—]/g, '-').replace(/\bch[\s-]*\d*[\s-]*(?:sp|space)s?\b/g, 'sp').replace(/\bv-?sts?\b/g, 'vst');
+  const part = '\\d+\\s*(?:[a-z]+\\s*){0,2}', re = new RegExp(`[\\[({]\\s*=?\\s*(${part}(?:\\s*(?:,|and|&|\\+)\\s*${part})*)[\\])}](?!\\s*(?:x\\s*\\d|\\d|times?\\b|in\\b|into\\b))`, 'g');
+  let best = null;
+  for (const m of t.matchAll(re)) {
+    const parts = [...m[1].matchAll(/(\d+)\s*([a-z]+)?/g)].map(q => ({ n: +q[1], unit: q[2] ? CNT_UNIT[q[2]] : 'st' }));
+    if (parts.every(p => p.unit)) best = parts;
+  }
+  if (!best) { const m = t.match(/(?:-|:)\s*(\d+)\s*(stitch(?:es)?|sts?|sc|hdc|dc|tr|clusters?|sp|sps)\s*\.?\s*$/); if (m) best = [{ n: +m[1], unit: CNT_UNIT[m[2]] }]; }
+  return best;
+}
+function normWork(body, info) {
+  let s = ' ' + String(body).toLowerCase().replace(/[×✕]/g, 'x').replace(/[–—]/g, '-').replace(/[‘’“”"`]/g, ' ').replace(/(\w)'(\w)/g, '$1$2').replace(/'/g, ' ') + ' ';
+  const part = '\\d+\\s*(?:[a-z-]+\\s*){0,3}';
+  s = s.replace(new RegExp(`[\\[({]\\s*=?\\s*${part}(?:\\s*(?:,|and|&|\\+)\\s*${part})*[\\])}](?!\\s*(?:x\\s*\\d|\\d|times?\\b|in\\b|into\\b))`, 'g'), m => (/\b(?:counts?|does|not)\b/.test(m) ? m : ' '))
+    .replace(/(?:-|:)\s*\d+\s*(?:stitch(?:es)?|sts?|sc|hdc|dc|tr|clusters?)\s*\.?\s*$/, ' ')
+    .replace(/[\[{]/g, '(').replace(/[\]}]/g, ')')
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/g, w => NUMW[w])
+    .replace(/\b(?:second|third|fourth|fifth|sixth)\b/g, w => ({ second: '2nd', third: '3rd', fourth: '4th', fifth: '5th', sixth: '6th' })[w])
+    .replace(/\b(?:made\s+)?(?:in|on|of|from)\s+(?:the\s+)?(?:previous|last|prev)\s+(?:rnd|round|row)\b|\bbelow\b|\bas\s+before\b|\b(?:of\s+)?your\s+work\b/g, ' ')
+    .replace(/\b(?:change|switch)\s+(?:yarn\s+)?(?:colou?r\s+)?to\s+(?:colou?r\s+)?[a-z0-9]+\b|\bwith\s+(?:the\s+)?(?:main|accent|contrast(?:ing)?|new|mc|cc)?\s*colou?r(?:\s+[a-z](?![a-z]))?/g, ' ')
+    .replace(/\(\s*the\s+st\s+attached[^)]*\)/g, ' ')
+    .replace(/\bhalf[\s-]+double(?:\s+crochets?)?\b/g, 'hdc').replace(/\bdouble\s+crochets?\b/g, 'dc').replace(/\bsingle\s+crochets?\b/g, 'sc').replace(/\b(?:treble|triple)(?:\s+crochets?)?\b/g, 'tr')
+    .replace(/\bstacked\s+(?:dc|double)\b/g, 'stdc')
+    .replace(/\b(sc|hdc|dc|tr)\s*(\d)\s*-?\s*tog(?:ether)?\b/g, ' $1 tog_$2 ').replace(/\b(?:inv(?:isible)?\s*)?dec(?:rease)?s?\b/g, ' sc tog_2 ')
+    .replace(/(\d)(?=(?:sc|hdc|dc|tr|ch)\b)/g, '$1 ').replace(/\bch(?=\d)/g, 'ch ')
+    .replace(/\b(fp|bp)\s*(dc|sc)\b/g, '$1$2')
+    .replace(/\b(?:working\s+)?(?:in\s+|through\s+)?(?:the\s+)?(front|back)\s+loops?(?:\s+only)?(?:\s+of)?|\b(blo|flo)\b/g, (m, a, b) => { info.loop = a || (b === 'blo' ? 'back' : 'front'); return ' '; })
+    .replace(/\b(bl|fl)(sc|hdc|dc)\b/g, (m, a, b) => { info.loop = a === 'bl' ? 'back' : 'front'; return b; })
+    .replace(/\b(?:make\s+(?:a\s+)?)?slip\s*knot(?:\s+on\s+(?:the\s+|your\s+)?hook)?\b/g, ' ')
+    .replace(/\b(?:sl(?:ip)?\s*st(?:itch(?:es)?)?s?|ss)\b/g, ' slst ')
+    .replace(/\bjoin\s+(?:(?:the\s+)?(?:new\s+)?(?:yarn|colou?r(?:\s+[a-z](?![a-z]))?|mc|cc)|with\s+(?:a\s+)?standing)\b/g, ' attach ')
+    .replace(/\b(?:corner\s+)(?:ch(?:ain)?[\s-]*\d*[\s-]*)?(?:sp|space)s?\b|\bch(?:ain)?[\s-]*\d*[\s-]*(?:sp|space)s?\s+corner\b/g, ' csp ')
+    .replace(/\bch(?:ain)?[\s-]*\d*[\s-]*(?:sp|space)s?\b|\b(?:sp|space)s?\b/g, ' sp ').replace(/\bcorners?\b/g, ' csp ')
+    .replace(new RegExp(`\\(\\s*=?\\s*${part}(?:\\s*(?:,|and|&|\\+)\\s*${part})*\\)(?!\\s*(?:x\\s*\\d|\\d|times?\\b|in\\b|into\\b))`, 'g'), m => (/\b(?:counts?|does|not)\b/.test(m) ? m : ' ')) /* a count naming ch-spaces, now that they are one word */
+    .replace(/\b(\d+)(?:st|nd|rd|th)\s+ch(?:ain)?s?\s*(?:\([^)]*\)\s*)?from\s+(?:the\s+)?hook\b/g, ' hook_$1 ')
+    .replace(/\(?\s*(?:the\s+)?skipped\s+(?:\d+\s+)?(?:ch(?:ain)?s?\s+)?(?:counts?|count)\s+as\s+(?:a\s+|the\s+|first\s+)*(?:dc|st|stitch|hdc|sc|tr)\s*\)?/g, () => { info.skipCounts = true; return ' '; })
+    .replace(/\btop\s+of\s+(?:the\s+)?(?:beg(?:inning)?\s+|first\s+|1st\s+|turning\s+)?(?:ch(?:ain)?(?:[\s-]*\d+)?|dc|sc|hdc|st(?:itch)?|tch)(?:\s+(?:from|at|of)\s+(?:the\s+)?beg(?:inning)?(?:\s+of\s+(?:the\s+)?(?:round|rnd|row))?)?|\b(?:turning\s+ch(?:ain)?|tch)\b/g, ' top ')
+    .replace(/\b(?:beg(?:inning)?|base)\s+ch(?:ain)?(?:[\s-]*\d+)?\b/g, ' base ').replace(/\bstarting\b|\b1st\b/g, ' first ')
+    .replace(/\bch(?:ain)?\s*(\d+)\s*(?:sts?|stitch(?:es)?)?\s*\(?\s*((?:that\s+)?counts?\s+as\s+[^,;)]*|does\s*n[o']t\s+count[^,;)]*|not\s+counted[^,;)]*)?\s*\)?/g, (m, n, c) => ` ch ${n} ${c ? (/^(?:that\s+)?counts?/.test(c) ? 'counted' : 'uncounted') : ''} `)
+    .replace(/\bchains?\b/g, ' ch ')
+    .replace(/,\s*t\s*[,.]|\bturn(?:ing)?\b/g, ' turn , ')
+    .replace(/\baround\s+(?:the\s+)?post\s+of\b/g, ' in ')
+    .replace(/\b(?:in|into)?\s*(?:the\s+)?(?:each|every)\s+(?:rem(?:aining)?\s+)?(st|stitch|ch|sp|dc|sc|hdc|tr)[a-z]*(\s+(?:and|&)\s+(?:each\s+)?(?:st|stitch|ch|sp|dc)[a-z]*)?(?:\s+(?:across|around|to\s+(?:the\s+)?end(?:\s+of\s+(?:the\s+)?(?:row|rnd|round))?))?(?:\s+(?:to|until)\s+(?:the\s+)?last\s+(\d+)\s*(?:sts?|stitch(?:es)?)?)?/g, (m, a, b, l) => ` fill_${b ? 'any' : a === 'sp' ? 'sp' : 'st'}${l ? 'l' + l : ''} `)
+    .replace(/\b(?:across|around|to\s+(?:the\s+)?end(?:\s+of\s+(?:the\s+)?(?:row|rnd|round))?)\b/g, ' fill_st ');
+  // repeat clauses → markers: §A§ (across/around), §N3§ (3 times in all), §L2§ (to the last 2 sts), §?§ (no count)
+  s = s.replace(/[.;,]?\s*\b(?:and\s+)?rep(?:eat)?\b(?:\s+from)?(?:\s+the)?\s*(?:\*+)?(?:\s*(?:to|until|through|-)\s*\*+)?\s*(?:(fill_[a-z0-9]+)?\s*(?:(?:to|until)\s+(?:the\s+)?last\s+(\d+)?\s*(?:sts?|stitch(?:es)?|ch|dc|sc|hdc)?|until\s+(?:there\s+are\s+)?(\d+)\s*(?:sts?|stitch(?:es)?)\s+(?:left|remain(?:ing)?))|(fill_[a-z0-9]+)|(\d+)\s*(more\s+)?times?(\s+more)?)?/g,
+    (m, fl, l1, l2, fl2, n, m1, m2) => { const L = l1 || l2 || (/last/.test(m) ? '1' : ''); return ` §${L ? 'L' + L : fl || fl2 ? 'A' : n ? 'N' + (+n + (m1 || m2 ? 1 : 0)) : '?'}§ `; });
+  return s;
+}
+// parse normalised text into nodes
+function readWork(body) {
+  const info = { loop: null, skipCounts: false, unknown: new Set(), stitches: 0, turn: false, join: false };
+  const s = normWork(body, info);
+  const tok = s.match(/\*+|§[^§]*§|[(),;.]|[a-z]+_[a-z0-9]+|\d+|[a-z']+/g) || [];
+  let i = 0;
+  const NOUN = new Set(['st', 'sts', 'stitch', 'stitches', 'dc', 'sc', 'hdc', 'tr', 'stdc', 'ch', 'chs', 'sp', 'csp', 'fpdc', 'bpdc', 'v']);
+  const FIL = new Set(['in', 'into', 'the', 'and', 'then', 'a', 'of', 'to', 'next', 'with', 'work', 'working', 'make', 'on', 'at', 'from', 'more', 'same', 'all', 'it', 'st', 'sts', 'stitch', 'stitches', 'hook', 'ring', 'row', 'round', 'rnd', 'beg', 'yarn', 'times', 'time', 'this', 'that', 'corner', 'each', 'first', 'last', 'your', 'x', 'counted', 'uncounted', 'once', 'again', 'pattern', 'again', 'as', 'over', 'instructions', 'is', 'are', 'mr', 'magic', 'loop', 'circle']);
+  const isN = t => t != null && /^\d+$/.test(t);
+  function target(allowTo) { // after "in"/"into" (or "to", for a sl st), or a bare fill/hook token
+    const t = tok[i];
+    if (/^fill_/.test(t)) { i++; const m = t.match(/^fill_([a-z]+?)(?:l(\d+))?$/); return { to: 'fill', kind: m ? m[1] : 'st', leave: m && m[2] ? +m[2] : 0 }; }
+    if (/^hook_/.test(t)) { i++; return { to: 'hook', n: +t.slice(5) }; }
+    if (t === 'top') { i++; return { to: 'top' }; }
+    if (t === 'base' || t === 'ring' || t === 'mr' || (t === 'magic' && /^(ring|circle|loop)$/.test(tok[i + 1]))) { i += t === 'magic' ? 2 : 1; return { to: 'ring' }; }
+    if (t !== 'in' && t !== 'into' && !(allowTo && t === 'to')) return null;
+    let j = i + 1; while (tok[j] === 'the' || tok[j] === 'each' && tok[j + 1] === 'of') j += tok[j] === 'each' ? 2 : 1;
+    const w = tok[j], nx = tok[j + 1];
+    const kindAt = k => { let kind = 'st', jj = k; while (NOUN.has(tok[jj])) { if (tok[jj] === 'sp') kind = 'sp'; if (tok[jj] === 'csp') kind = 'csp'; jj++; } return [kind, jj]; };
+    if (/^(?:fill_|hook_)/.test(w) || w === 'top' || w === 'base' || w === 'ring' || w === 'mr' || w === 'magic') { i = j; return target(); }
+    if (w === 'next' && isN(nx) && NOUN.has(tok[j + 2])) { const [kind, e] = kindAt(j + 2); i = e; return { to: 'each', n: +nx, kind }; }
+    if (w === 'next' && isN(nx)) { i = j + 2; return { to: 'each', n: +nx, kind: 'st' }; }
+    if (w === 'next' || w === 'any' || w === 'following') { const [kind, e] = kindAt(j + 1); i = e; return { to: 'next', kind }; }
+    if (w === 'same') { const [kind, e] = kindAt(j + 1); i = e; return { to: 'same', kind }; }
+    if (w === 'first' || w === '1st' || w === 'beg') { const [kind, e] = kindAt(j + 1); i = e; return { to: 'first', kind }; }
+    if (w === 'last') { const [kind, e] = kindAt(j + 1); i = e; return { to: 'last', kind }; }
+    if (NOUN.has(w)) { const [kind, e] = kindAt(j); i = e; return { to: 'next', kind }; }
+    return null;
+  }
+  function seq(stop) {
+    const out = []; let lastOp = null, pend = null;
+    while (i < tok.length && tok[i] !== ')' && !(stop && stop(tok[i]))) {
+      const t = tok[i];
+      if (t === ',' || t === ';' || t === '.') { i++; continue; }
+      if (/^\*+$/.test(t)) { // * unit *, repeat clause
+        i++; const unit = seq(x => /^\*+$/.test(x) || /^§/.test(x));
+        if (/^\*+$/.test(tok[i] || '')) i++;
+        let k = i; while (tok[k] === ',' || tok[k] === ';' || tok[k] === '.') k++;
+        if (/^§/.test(tok[k] || '')) { i = k + 1; out.push({ t: 'rep', items: unit, spec: tok[k].slice(1, -1) }); }
+        else { out.push({ t: 'rep', items: unit, spec: 'N1', noClause: true }); }
+        continue;
+      }
+      if (/^§/.test(t)) { i++; const sp = t.slice(1, -1); let k = out.length; while (k > 0 && out[k - 1].t !== 'ch' && out[k - 1].t !== 'turn') k--; if (k === out.length) k = 0; const unit = out.splice(k); if (unit.length) out.push({ t: 'rep', items: unit, spec: sp }); continue; }
+      if (t === '(') {
+        i++; const items = seq(); if (tok[i] === ')') i++;
+        let tg = target();
+        if (pend && (!tg || tg.to === 'same')) tg = pend; pend = null;
+        if (tg) { out.push({ t: 'grp', items, tgt: tg }); lastOp = null; continue; }
+        if (tok[i] === 'x' && isN(tok[i + 1])) { out.push({ t: 'rep', items, spec: 'N' + tok[i + 1] }); i += 2; continue; }
+        if (isN(tok[i]) && /^times?$/.test(tok[i + 1])) { out.push({ t: 'rep', items, spec: 'N' + tok[i] }); i += 2; continue; }
+        if (/^fill_/.test(tok[i] || '')) { i++; out.push({ t: 'rep', items, spec: 'A' }); continue; }
+        out.push(...items); continue;
+      }
+      let n = null;
+      if (isN(t) && WOPS.has(tok[i + 1])) { n = +t; i++; }
+      const op = tok[i];
+      if (WOPS.has(op)) {
+        i++; info.stitches++;
+        let tog = 0; if (/^tog_\d$/.test(tok[i] || '')) { tog = +tok[i].slice(4); i++; }
+        if (n == null && isN(tok[i]) && !/^(?:times?|more|sts?|stitch(?:es)?)$/.test(tok[i + 1] || '') && tok[i + 1] !== 'x') { n = +tok[i]; i++; }
+        let tg = target();
+        if (pend && (!tg || tg.to === 'same')) { tg = pend; } pend = null;
+        if (tog) out.push({ t: 'st', op, n: n || 1, tgt: tg && tg.to !== 'fill' && tg.to !== 'each' ? tg : null, tog });
+        else if (tg && tg.to === 'each') { out.push({ t: 'st', op, n: 1, tgt: tg }); }
+        else out.push({ t: 'st', op, n: n || 1, tgt: tg, each: !tg && n > 1 });
+        lastOp = op;
+        if (tok[i] === 'x' && isN(tok[i + 1])) { out.push({ t: 'rep', items: [out.pop()], spec: 'N' + tok[i + 1] }); i += 2; }
+        continue;
+      }
+      if (n != null) { i++; continue; }
+      if (t === 'ch') {
+        i++; let m = 1; if (isN(tok[i])) { m = +tok[i]; i++; }
+        let counts = null; if (tok[i] === 'counted') { counts = true; i++; } else if (tok[i] === 'uncounted') { counts = false; i++; }
+        out.push({ t: 'ch', n: m, counts }); continue;
+      }
+      if (t === 'skip' || t === 'sk' || t === 'miss') {
+        i++; while (tok[i] === 'the' || tok[i] === 'next' || tok[i] === 'each' || tok[i] === 'of' || tok[i] === 'over') i++;
+        let m = 1; if (isN(tok[i])) { m = +tok[i]; i++; }
+        let kind = 'st'; while (NOUN.has(tok[i])) { if (tok[i] === 'sp') kind = 'sp'; i++; }
+        out.push({ t: 'sk', n: m, kind }); continue;
+      }
+      if (t === 'slst') {
+        i++; let m = 1; if (isN(tok[i])) { m = +tok[i]; i++; }
+        let tg = target(); if (!tg && tok[i] === 'to') { tg = target(true); if (!tg) { i++; tg = target() || { to: 'top' }; if (tok[i] === 'join') i++; } }
+        if (tg && tg.to === 'each') { m = tg.n; tg = { to: 'next', kind: tg.kind }; }
+        const nd = { t: 'sl', n: m, tgt: tg }; out.push(nd);
+        while ((tok[i] === 'and' || tok[i] === ',') && (tok[i + 1] === 'in' || tok[i + 1] === 'into')) { i++; const t2 = target(); if (t2) out.push({ t: 'sl', n: t2.to === 'each' ? t2.n : 1, tgt: t2.to === 'each' ? { to: 'next', kind: t2.kind } : t2 }); }
+        continue;
+      }
+      if (t === 'join') { i++; info.join = true; out.push({ t: 'join' }); while (tok[i] === 'with' || tok[i] === 'slst' || tok[i] === 'a' || tok[i] === 'to') i++; target(); continue; }
+      if (t === 'attach') { i++; const tg = target(); out.push({ t: 'mv', tgt: tg || { to: 'next', kind: 'st' } }); continue; }
+      if (t === 'turn') { i++; info.turn = true; out.push({ t: 'turn' }); continue; }
+      const tg = target();
+      if (tg) { const nx = tok[i]; if (nx === ',' || nx === '(' || WOPS.has(nx) || isN(nx) && WOPS.has(tok[i + 1])) { if (tok[i] === ',') i++; if (tok[i] === '(' || WOPS.has(tok[i]) || isN(tok[i])) { pend = tg; continue; } } if (lastOp) out.push({ t: 'st', op: lastOp, n: 1, tgt: tg, cont: true }); else pend = tg; continue; }
+      i++; if (!FIL.has(t) && !isN(t)) info.unknown.add(t);
+    }
+    return out;
+  }
+  const nodes = []; while (i < tok.length) { nodes.push(...seq()); if (tok[i] === ')') i++; }
+  return { nodes, info };
+}
+// work the nodes into the units below. opts: ring (round 1 of a granny), rows (turned rows), tch (a turning chain carried from the line above), readings
+function workRow(nodes, below, opts = {}) {
+  const S = { c: 0, last: -1, firstSp: -1, units: [], acts: [], warn: [], short: 0, below: below.slice(), started: false };
+  if (opts.round && !opts.ring && nodes[0] && nodes[0].t === 'sl' && below[0] && below[0].k === 'st') S.c = 1;
+  const B = () => S.below;
+  const ring = !!opts.ring;
+  const isSt = u => u.k === 'st' || u.k === 'ch';
+  function find(kind, from) {
+    const b = B();
+    for (let j = from; j < b.length; j++) { const u = b[j]; if (kind === 'any' || (kind === 'sp' ? u.k === 'sp' : kind === 'csp' ? u.k === 'sp' && u.corner : isSt(u))) return j; }
+    if (kind === 'csp') return find('sp', from);
+    return -1;
+  }
+  function rotateAt(j) { // a joined round may start anywhere: the unit it starts in becomes the first one
+    if (!opts.round || S.started || j <= 0) { S.started = true; return j; }
+    S.below = S.below.slice(j).concat(S.below.slice(0, j)); S.started = true; S.c = 0; return 0;
+  }
+  function resolve(tg, kindDflt) {
+    if (ring) return 0;
+    const b = B();
+    if (!tg) tg = { to: 'next', kind: kindDflt || 'st' };
+    let j = -1;
+    if (tg.to === 'same') { if (S.last >= 0) return S.last; tg = { to: 'next', kind: tg.kind === 'csp' ? 'csp' : tg.kind }; }
+    if (tg.to === 'first' && tg.kind !== 'st' && S.firstSp >= 0) j = S.firstSp;
+    else if (tg.to === 'first' && tg.kind !== 'st' && opts.round && S.started) j = find(tg.kind, 0);
+    else if (tg.to === 'last') { for (let k = b.length - 1; k >= S.c; k--) if (tg.kind === 'sp' ? b[k].k === 'sp' : isSt(b[k])) { j = k; break; } }
+    else if (tg.to === 'top') { j = opts.round && S.started ? -2 : (() => { for (let k = b.length - 1; k >= S.c; k--) if (isSt(b[k])) return k; return -1; })(); if (j === -2) return -2; }
+    else if (tg.to === 'hook') { j = S.c + tg.n - 1; if (j >= b.length) j = -1; else { const sk = tg.n - 1; S.skipped = sk; } }
+    else if (tg.to === 'ring') j = S.last >= 0 ? S.last : find('any', S.c);
+    else j = find(opts.startCorner && !S.started && tg.kind === 'sp' ? 'csp' : tg.kind || 'st', S.c); /* a round that ends in its starting space starts in a corner */
+    if (j < 0) { S.short++; return -1; }
+    j = rotateAt(j);
+    S.c = Math.max(S.c, j + 1); S.last = j;
+    if (S.below[j].k === 'sp' && S.firstSp < 0) S.firstSp = j;
+    return j;
+  }
+  const stUnit = (op, base, extra) => { const u = base >= 0 ? S.below[base] : null; S.units.push({ k: 'st', op, b: base }); S.acts.push(Object.assign({ a: 'st', op, b: base, into: u ? u.k : ring ? 'ring' : '' }, u && u.corner ? { corner: true } : {}, extra || {})); };
+  const chRun = (n, counts, extra) => {
+    if (counts) { S.units.push({ k: 'st', op: 'ch', b: S.last }); S.acts.push(Object.assign({ a: 'ch', n, counts: true }, extra || {})); return; }
+    const prev = S.units[S.units.length - 1];
+    if (prev && prev.k === 'sp') prev.n += n; else S.units.push({ k: 'sp', n, b0: prev ? prev.b : -1 });
+    S.acts.push(Object.assign({ a: 'ch', n, counts: false }, extra || {}));
+  };
+  let pendingSkip = 0;
+  function stitch(nd, tgOverride) {
+    const tg = tgOverride || nd.tgt;
+    if (tg && tg.to === 'fill') {
+      for (let guard = 0; guard < 2000; guard++) { const j = ring ? 0 : find(tg.kind === 'sp' ? 'sp' : tg.kind === 'any' ? 'any' : 'st', S.c); if (j < 0 || ring && guard) break; if (tg.leave) { let left = 0; for (let q = j; q < S.below.length; q++) if (isSt(S.below[q])) left++; if (left <= tg.leave) break; } resolve({ to: 'next', kind: tg.kind === 'sp' ? 'sp' : tg.kind === 'any' ? 'any' : 'st' }); for (let k = 0; k < nd.n; k++) stitchAt(nd.op, S.last, k); }
+      return;
+    }
+    if (tg && tg.to === 'each') { for (let k = 0; k < tg.n; k++) { const j = resolve({ to: 'next', kind: tg.kind }); stitchAt(nd.op, j, 0); } return; }
+    if (nd.each) { for (let k = 0; k < nd.n; k++) { const j = resolve(null); stitchAt(nd.op, j, 0); } return; }
+    if (nd.tog) { /* a decrease: one stitch worked over the next n */
+      for (let k = 0; k < nd.n; k++) { const j = resolve(k ? null : tg); if (j < 0) continue; for (let q = 1; q < nd.tog; q++) { const z = find('st', S.c); if (z < 0) { S.short++; break; } S.c = z + 1; } stitchAt(nd.op, j, 0, { tog: nd.tog }); }
+      return;
+    }
+    const j = resolve(tg); for (let k = 0; k < nd.n; k++) stitchAt(nd.op, j, k);
+  }
+  function stitchAt(op, j, k, more) {
+    if (j === -1) return;
+    if (S.chStart) { S.chStart.b = j; S.chStart = null; }
+    const extra = {}; if (k) extra.same = true; if (pendingSkip) { extra.skip = pendingSkip; pendingSkip = 0; } if (S.skipped) { extra.hook = S.skipped + 1; S.skipped = 0; }
+    stUnit(op, j, Object.assign(extra, more || {}));
+  }
+  let sawStitch = false, tchNode = null, trailing = [];
+  if (opts.tch && !opts.ring) { // a chain written at the end of the line above, before the turn
+    const counts = opts.tch.counts != null ? opts.tch.counts : !!opts.tchCounts;
+    S.acts.push({ a: 'tch', n: opts.tch.n, counts, carried: true });
+    if (counts) { const j = opts.tchEats ? resolve(null) : -1; S.units.push({ k: 'st', op: 'ch', b: j }); }
+  }
+  function run(nodes) {
+    for (let x = 0; x < nodes.length; x++) {
+      const nd = nodes[x];
+      if (S.short > 2000) return;
+      if (nd.t === 'st') { sawStitch = true; stitch(nd); }
+      else if (nd.t === 'ch') {
+        const rest = nodes.slice(x + 1);
+        if (!sawStitch && opts.rows && !opts.tch && !S.acts.some(a => a.a !== 'tch')) { // a turning chain at the start of the row
+          const counts = nd.counts != null ? nd.counts : !!opts.tchCounts;
+          S.acts.push({ a: 'tch', n: nd.n, counts });
+          if (counts) { const j = opts.tchEats ? resolve(null) : -1; S.units.push({ k: 'st', op: 'ch', b: j }); }
+          continue;
+        }
+        if (opts.rows && rest.every(r => r.t === 'turn' || r.t === 'ch') && sawStitch) { S.next = { n: nd.n, counts: nd.counts }; continue; } // "ch 3 and turn": the next row's turning chain
+        if (opts.round && !sawStitch && !S.acts.some(a => a.a === 'st')) { // a starting chain in a round: it stands in for the first stitch only if it counts
+          const counts = nd.counts != null ? nd.counts : !!opts.chCounts;
+          if (counts) { const u = { k: 'st', op: 'ch', b: ring ? 0 : null }; S.units.push(u); S.acts.push({ a: 'ch', n: nd.n, counts: true, start: true }); if (!ring) S.chStart = u; } /* it sits on the place the first stitch goes into */
+          else S.acts.push({ a: 'ch', n: nd.n, counts: false, start: true });
+          sawStitch = sawStitch || counts; continue;
+        }
+        chRun(nd.n, nd.counts === true && !opts.round && !opts.rows ? true : false);
+      }
+      else if (nd.t === 'sk') { if (nd.kind === 'sp') { resolve({ to: 'next', kind: 'sp' }); } else for (let k = 0; k < nd.n; k++) { const j = find('st', S.c); if (j < 0) { S.short++; break; } S.c = j + 1; } pendingSkip += nd.n; }
+      else if (nd.t === 'grp') {
+        const j = resolve(nd.tgt); if (j === -1) continue; sawStitch = true; let first = true;
+        for (const it of nd.items) {
+          if (it.t === 'st') { for (let k = 0; k < it.n; k++) { stitchAt(it.op, j, first ? 0 : 1); first = false; } }
+          else if (it.t === 'ch') chRun(it.n, false);
+        }
+        S.last = j;
+      }
+      else if (nd.t === 'rep') {
+        const sp = nd.spec, want = sp[0] === 'N' ? +sp.slice(1) : null, leave = sp[0] === 'L' ? +sp.slice(1) : 0;
+        if (nd.noClause) S.warn.push('a * repeat with no “repeat” instruction: worked once.');
+        if (sp === '?') S.warn.push('“repeat” with no count: repeated to the end.');
+        if (ring && want == null) { S.warn.push('an open-ended repeat into the ring: worked to make four sides.'); const sides = nd.items.some(x => x.t === 'ch' || x.t === 'grp') ? 3 : 1; for (let k = 0; k < sides; k++) run(nd.items); continue; }
+        for (let k = 0; k < (want || 2000); k++) {
+          if (want == null) { // across: stop before an iteration that would run out (or leave fewer than `leave`)
+            const snap = JSON.stringify([S.c, S.last, S.firstSp, S.units.length, S.acts.length, S.short, pendingSkip, S.started]), bl = S.below;
+            const u0 = S.units.length, a0 = S.acts.length, unitsCopy = S.units.slice(), lastSp = S.units[S.units.length - 1] && S.units[S.units.length - 1].k === 'sp' ? S.units[S.units.length - 1].n : null;
+            run(nd.items);
+            const remain = (() => { let r = 0; for (let q = S.c; q < S.below.length; q++) if (isSt(S.below[q])) r++; return r; })();
+            if (S.short > JSON.parse(snap)[5] || remain < leave) {
+              const v = JSON.parse(snap); S.c = v[0]; S.last = v[1]; S.firstSp = v[2]; S.units = unitsCopy; S.acts.length = a0; S.short = v[5]; pendingSkip = v[6]; S.started = v[7]; S.below = bl;
+              if (lastSp != null) S.units[S.units.length - 1].n = lastSp;
+              break;
+            }
+            if (ring && k > 40) break;
+          } else run(nd.items);
+        }
+      }
+      else if (nd.t === 'sl') {
+        const tg = nd.tgt;
+        if (!tg || tg.to === 'top' || tg.to === 'first' && opts.round || tg.to === 'ring' && opts.ring) { S.acts.push({ a: 'join' }); S.join = true; continue; }
+        for (let k = 0; k < nd.n; k++) { const j = resolve(tg); if (j < 0) break; S.acts.push({ a: 'sl', b: j, into: S.below[j] ? S.below[j].k : '' }); }
+      }
+      else if (nd.t === 'join') { S.acts.push({ a: 'join' }); S.join = true; }
+      else if (nd.t === 'mv') { const j = resolve(nd.tgt); S.acts.push({ a: 'attach', b: j, into: j >= 0 && S.below[j] ? S.below[j].k : '' }); }
+      else if (nd.t === 'turn') { S.turn = true; }
+    }
+  }
+  run(nodes);
+  // corners: a chain space between two groups worked into the same unit (in a joined round, the last space wraps to the first group)
+  const U = S.units;
+  for (let q = 0; q < U.length; q++) if (U[q].k === 'sp') {
+    let a = q - 1; while (a >= 0 && U[a].k !== 'st') a--;
+    let z = q + 1; while (z < U.length && U[z].k !== 'st') z++;
+    const bA = a >= 0 ? U[a].b : null, bZ = z < U.length ? U[z].b : (opts.round ? (U.find(u => u.k === 'st') || {}).b : null);
+    U[q].corner = bA != null && bA === bZ && bA !== -1;
+  }
+  let remain = 0, spLeft = 0; for (let q = S.c; q < S.below.length; q++) if (isSt(S.below[q])) remain++;
+  if (opts.round && !ring) { const used = new Set(S.acts.filter(a => a.b != null && a.b >= 0).map(a => a.b)); U.forEach(u => { if (u.b != null) used.add(u.b); }); S.below.forEach((u, q) => { if (u.k === 'sp' && !used.has(q)) spLeft++; }); }
+  const cnt = { st: U.filter(u => u.k === 'st').length, ch: U.filter(u => u.k === 'sp').reduce((x, u) => x + u.n, 0), sp: U.filter(u => u.k === 'sp').length, cl: 0, corner: U.filter(u => u.k === 'sp' && u.corner).length };
+  let run2 = 0; for (const u of U) { if (u.k === 'st') run2++; else { if (run2) cnt.cl++; run2 = 0; } } if (run2) cnt.cl++;
+  if (opts.round && U.length && U[0].k === 'st' && U[U.length - 1].k === 'st' && cnt.cl > 1) cnt.cl--; // a round's last group runs into its first
+  return { units: U, acts: S.acts, cnt, warn: S.warn, short: S.short, remain, spLeft, next: S.next, turn: !!S.turn, join: !!S.join };
+}
+// which measure a printed count names; "(=20 st)" in a granny can be stitches plus chains
+function countMatch(parts, cnt) {
+  if (!parts) return null;
+  const val = { st: [cnt.st, cnt.st + cnt.ch], ch: [cnt.ch], sp: [cnt.sp], cl: [cnt.cl], corner: [cnt.corner] };
+  const sum = {}; for (const p of parts) sum[p.unit] = (sum[p.unit] || 0) + p.n; /* "4 ch-2 sps, 4 ch-1 sps" = 8 spaces */
+  parts = Object.keys(sum).map(u => ({ unit: u, n: sum[u] }));
+  let how = [];
+  for (const p of parts) {
+    const v = val[p.unit] || [cnt.st]; let k = v.indexOf(p.n);
+    if (k < 0) return null;
+    how.push(p.unit === 'st' && k === 1 ? 'st+ch' : p.unit);
+  }
+  return how.join(',');
+}
+const ROW_LBL = /^(?:(rows?|r(?:nd|ound)?s?)\.?\s*)(\d+)(?:\s*(?:[-–—]|to|through|&|and)\s*(?:(?:rows?|r(?:nd|ound)?s?)\.?\s*)?(\d+))?\s*(?:\((?:[a-z]+)\))?\s*[:.)-]?\s*(.*)$/i;
+const FOUND_RE = /^(?:(?:foundation(?:\s+(?:row|chain|ch))?|start(?:ing\s+chain)?|beg(?:in)?)\s*[:.-]?\s*)?(?:with\s+[^,]+,\s*)?ch(?:ain)?\s*(\d+)\b\s*[.,]?\s*(.*)$/i;
+const REP_ROWS = /^\s*(?:rep(?:eat)?|work)\s+(?:rows?|r)\s*(\d+)(?:\s*(?:[-–—]|to|through|and|&)\s*(\d+))?\b(.*)$/i;
+function repeatTimes(rest, a, b, have) { // "for 81 rows", "until you have 40 rows", "11 more times", "until the piece measures …"
+  const t = String(rest).toLowerCase(), span = b - a + 1;
+  let m = t.match(/(?:for|until\s+(?:you\s+have|there\s+are)|to\s+make)\s+(?:a\s+total\s+of\s+)?(\d+)\s+rows/); if (m) return { total: +m[1] };
+  m = t.match(/(\d+)\s*(more\s+)?times?(\s+more)?/); if (m) return { reps: +m[1] };
+  m = t.match(/\b(?:until|to)\b.*/); return { until: m ? m[0].trim() : 'as needed', reps: 1 };
+}
+// a round or row written as numbered steps ("1. Ch 3, …", "3. Repeat step 2 two more times"): the steps join into one body, a step repeat becomes a * repeat
+function mergeLine(e, s) {
+  const m = s.match(/^\s*(\d+)[.)]\s+(.*)$/);
+  if (!m) { e.body += ' ' + s; return; }
+  e.steps = e.steps || []; const t = m[2], rp = t.match(/^\s*rep(?:eat)?\s+steps?\s*(\d+)(?:\s*(?:&|and|-|to|through)\s*(?:steps?\s*)?(\d+))?\b(.*)$/i);
+  if (rp) { const a = +rp[1] - 1, b = rp[2] ? +rp[2] - 1 : a; if (e.steps[a] != null && e.steps[b] != null) { e.steps[a] = '* ' + e.steps[a]; e.steps[b] = e.steps[b] + ' *'; e.steps.push('repeat from * ' + rp[3]); } else e.steps.push(t); }
+  else e.steps.push(t);
+  e.body = e.head + ' ' + e.steps.join(', ');
+}
+// a flat piece in rows: one entry per row, each worked into the row below (turned). The printed count is the gate.
+function parseRows(text) {
+  const rows = [], warns = [], lines = [], unread = [], pre = [];
+  let found = null; const entries = [];
+  for (const raw of String(text).split(/\n/)) {
+    const s = raw.trim(); if (!s) continue;
+    const m = s.match(ROW_LBL), last = entries[entries.length - 1];
+    let fm;
+    if (!entries.length && !found && (fm = s.match(FOUND_RE)) && !/\b(?:sc|hdc|dc|tr)\b/i.test(fm[2])) { found = { ch: +fm[1], line: lines.length }; lines.push({ text: s, status: 'round' }); continue; }
+    if (!entries.length && !found && (fm = s.match(FOUND_RE))) { found = { ch: +fm[1], line: lines.length }; entries.push({ a: 0, b: 0, body: fm[2], text: s, li: lines.length, after: [], foundation: true }); lines.push({ text: s, status: 'round' }); continue; }
+    if (m) { entries.push({ a: +m[2], b: m[3] ? +m[3] : +m[2], body: m[4], text: s, li: lines.length, after: [] }); lines.push({ text: s, status: 'round' }); continue; }
+    const rr = s.match(REP_ROWS);
+    if (rr) { entries.push({ rep: true, a: +rr[1], b: rr[2] ? +rr[2] : +rr[1], times: repeatTimes(rr[3], +rr[1], rr[2] ? +rr[2] : +rr[1]), text: s, li: lines.length, after: [] }); lines.push({ text: s, status: 'round' }); continue; }
+    const cl = s.match(/=\s*(\d+)\s*(?:sts?|stitch(?:es)?)\s*\.?\s*$/i);
+    if (cl && last && !last.rep && !workCount(last.body)) { last.body += ` (${cl[1]} sts)`; lines.push({ text: s, status: 'note', count: +cl[1] }); continue; }
+    if (last && !last.rep && !last.after.length && !NOTE_RE.test(s) && (STV_RE.test(s) || /\b(?:sk|skip)\b/i.test(s)) && !workCount(last.body) && !last.shut) { if (last.head == null) last.head = last.body; mergeLine(last, s); last.text += '\n' + s; lines.push({ text: s, status: 'merged' }); continue; }
+    if (NOTE_RE.test(s) || !STV_RE.test(s)) { lines.push({ text: s, status: 'note' }); if (last && /^stitch\s+counts?\b/i.test(s)) last.shut = false; continue; }
+    const u = { text: s, why: 'not a row line this reader knows' };
+    unread.push(u); lines.push({ text: s, status: 'unread' }); (last ? last.after : pre).push(u);
+    warns.push(`“${s.slice(0, 60)}”: not read; this line needs a human.`);
+  }
+  const bodyOf = {}; let below = found ? Array.from({ length: found.ch }, () => ({ k: 'ch' })) : null, carry = null, prevN = null;
+  const readRow = (body, num, e) => {
+    const { nodes, info } = readWork(body), stated = workCount(body), w = [];
+    if (!below) { // the foundation chain is written in Row 1
+      const k = nodes.findIndex(n => n.t === 'ch'); if (k === 0 || (k > 0 && !nodes.slice(0, k).some(n => n.t === 'st'))) { const ch = nodes.splice(k, 1)[0]; below = Array.from({ length: ch.n }, () => ({ k: 'ch' })); found = { ch: ch.n, line: e.li, inRow: true }; }
+      else { below = Array.from({ length: (stated ? stated[0].n : 20) + 3 }, () => ({ k: 'ch' })); w.push('no foundation chain found; assumed one.'); }
+    }
+    const first = below.every(u => u.k === 'ch');
+    const base = { rows: true, tch: first ? null : carry, chCounts: false };
+    const hookN = (body.match(/\b(\d+|second|third|fourth)(?:st|nd|rd|th)?\s+ch(?:ain)?s?\b[^,;]*?from\s+(?:the\s+)?hook/i) || [])[1];
+    const alts = [{}, { tchCounts: true }, { tchCounts: true, tchEats: true }];
+    if (first && !info.skipCounts && hookN && (+hookN >= 3 || /third|fourth/i.test(hookN))) alts.push({ skipCounts: true });
+    const opts0 = Object.assign({}, base);
+    let best = null, how = null;
+    const reads = alts.map(o => [o, workRow(nodes, below, Object.assign({}, opts0, o))]);
+    reads.forEach(([o, r]) => { if (!(first && (info.skipCounts || o.skipCounts))) return; r.units.unshift({ k: 'st', op: 'ch', b: -1 }); r.cnt.st++; r.acts.unshift({ a: 'skipch', counts: true }); });
+    for (const [o, r] of reads) { const h = stated ? countMatch(stated, r.cnt) : (prevN != null && r.cnt.st === prevN ? 'st' : null); if (h) { best = r; best.reading = o; how = h; break; } }
+    if (!best) { best = reads[0][1]; best.reading = {}; }
+    const r = best;
+    if (info.unknown.size) w.push(`ignored “${[...info.unknown].join('”, “')}”.`);
+    w.push(...r.warn);
+    if (r.short) w.push(`runs out of stitches in the row below (${r.short} missing).`);
+    if (r.remain && !/\b(?:leave|unworked|rem(?:aining)?)\b/i.test(body)) w.push(`${r.remain} stitch${r.remain > 1 ? 'es' : ''} of the row below left unworked.`);
+    if (stated && !how) w.push(`stated [${stated.map(p => p.n).join(', ')}] but the stitches make ${r.cnt.st}${r.cnt.sp ? ` sts and ${r.cnt.sp} ch-sps` : ''}.`);
+    const row = { row: num, acts: r.acts, units: r.units, cnt: r.cnt, got: r.cnt.st, stated: stated ? stated[0].n : null, countAs: how, line: e.li, loop: info.loop || null, turn: r.turn };
+    if (r.reading.tchCounts) row.tchCounts = true; if (r.reading.skipCounts || info.skipCounts && first) row.skipCounts = true;
+    if (!info.stitches) { row.unread = { text: e.text, why: 'no stitches this reader knows' }; unread.push(row.unread); w.push('no stitches this reader knows; this line needs a human.'); }
+    if (w.length) row.warn = w;
+    w.forEach(x => warns.push(`Row ${num}: ${x}`));
+    rows.push(row);
+    carry = r.next || null;
+    // the next row works back along this one; a printed count that disagrees is kept as the count the next row reads
+    let units = r.units.slice();
+    if (stated && !how && stated[0].unit === 'st' && units.filter(u => u.k === 'st').length !== stated[0].n) { units = Array.from({ length: stated[0].n }, () => ({ k: 'st' })); }
+    below = units.reverse(); prevN = stated && !how ? stated[0].n : r.cnt.st;
+  };
+  for (const e of entries) {
+    if (e.rep) {
+      const span = []; for (let q = e.a; q <= e.b; q++) if (bodyOf[q] != null) span.push(q);
+      if (!span.length) { const u = { text: e.text, why: `row ${e.a} was not read` }; unread.push(u); lines[e.li].status = 'unread'; warns.push(`“${e.text.slice(0, 60)}”: not read; this line needs a human.`); continue; }
+      const t = e.times, last = rows.length ? rows[rows.length - 1].row : 0;
+      let n = t.total != null ? Math.max(0, t.total - last) : t.reps * span.length;
+      if (n > 2000) n = 2000;
+      for (let k = 0; k < n; k++) { const q = span[k % span.length]; readRow(bodyOf[q], last + k + 1, e); rows[rows.length - 1].of = q; }
+      if (t.until) { const rw = rows[rows.length - 1]; if (rw) rw.until = t.until; }
+      continue;
+    }
+    let body = e.body;
+    const br = body.match(/^\s*(?:rep(?:eat)?|work)\s+(?:as\s+(?:for\s+)?)?(?:rows?|r)\s*(\d+)\b\.?/i);
+    if (br && bodyOf[+br[1]] != null) body = bodyOf[+br[1]] + ' ' + body.slice(br[0].length);
+    if (e.foundation) { readRow(body, 0, e); continue; }
+    for (let q = e.a; q <= Math.max(e.a, e.b); q++) { bodyOf[q] = body; readRow(body, q, e); }
+    if (e.after.length && rows.length) rows[rows.length - 1].after = e.after;
+  }
+  const st = (/\bhdc\b/i.test(text) ? 'hdc' : /\bdc\b/i.test(text) ? 'dc' : 'sc');
+  const n = rows.length ? rows[0].got : 20;
+  return { kind: 'rows', foundation: found, rows, warns, unread, lines, before: pre, cand: { type: 'rows', st, n, rows: Math.max(1, rows.filter(r => r.row > 0).length) } };
+}
+// a granny square (or any joined round worked into ch-spaces): round 1 into the ring, each round after into the round below
+function parseGranny(text) {
+  const rounds = [], warns = [], lines = [], unread = [], pre = [], entries = [];
+  for (const raw of String(text).split(/\n/)) {
+    const s = raw.trim(); if (!s) continue;
+    const m = s.match(ROW_LBL), last = entries[entries.length - 1];
+    if (m) { entries.push({ a: +m[2], b: m[3] ? +m[3] : +m[2], body: m[4], text: s, li: lines.length, after: [] }); lines.push({ text: s, status: 'round' }); continue; }
+    if (last && !last.after.length && !NOTE_RE.test(s) && STV_RE.test(s) && !workCount(last.body)) { if (last.head == null) last.head = last.body; mergeLine(last, s); last.text += '\n' + s; lines.push({ text: s, status: 'merged' }); continue; }
+    if (!entries.length && /^(?:ch(?:ain)?\s*\d+|make\s+a\s+magic|magic\s+ring|mr\b)/i.test(s)) { entries.push({ a: 0, b: 0, body: s, text: s, li: lines.length, after: [], start: true }); lines.push({ text: s, status: 'round' }); continue; }
+    if (NOTE_RE.test(s) || !STV_RE.test(s)) { lines.push({ text: s, status: 'note' }); continue; }
+    const u = { text: s, why: 'not a round line this reader knows' };
+    unread.push(u); lines.push({ text: s, status: 'unread' }); (last ? last.after : pre).push(u);
+    warns.push(`“${s.slice(0, 60)}”: not read; this line needs a human.`);
+  }
+  let below = null; const bodyOf = {}; let ringNote = null;
+  for (const e of entries) {
+    if (e.start && !/\b(?:sc|hdc|dc|tr)\b/i.test(e.body)) { ringNote = e; continue; } // "Ch 4, sl st to form a ring"
+    let body = e.body;
+    if (e.start) e.a = e.b = 1;
+    const br = body.match(/^\s*(?:rep(?:eat)?|work)\s+(?:as\s+(?:for\s+)?)?(?:r(?:nd|ound)?s?)\s*(\d+)\b\.?/i);
+    if (br && bodyOf[+br[1]] != null) body = bodyOf[+br[1]] + ' ' + body.slice(br[0].length);
+    for (let q = e.a; q <= Math.max(e.a, e.b); q++) {
+      bodyOf[q] = body;
+      const { nodes, info } = readWork(body), stated = workCount(body), w = [];
+      const ring = !below;
+      const bl = ring ? [{ k: 'ring' }] : nodes.findIndex(n => n.t === 'turn') >= 0 && nodes.findIndex(n => n.t === 'turn') < nodes.findIndex(n => n.t === 'st' || n.t === 'grp') ? below.slice().reverse() : below; /* a turned round works back along the one below */
+      const conv = (() => { let k = 0; while (nodes[k] && /^(?:sl|mv|turn|join)$/.test(nodes[k].t)) k++; const a = nodes[k], b = nodes[k + 1]; return !!(a && b && a.t === 'ch' && a.n >= 2 && (b.t === 'st' && (!b.tgt || b.n === 2 || /same|ring|hook/.test(b.tgt.to)) || b.t === 'grp')); })(); /* granny convention: a starting ch 3 before more dc into the same place counts as a dc */
+      const deep = ns => ns.some(n => (n.tgt && n.tgt.to === 'first' && n.tgt.kind !== 'st') || (n.items && deep(n.items)));
+      const startCorner = deep(nodes);
+      const reads = (conv ? [{ chCounts: true }, { chCounts: false }] : [{ chCounts: false }, { chCounts: true }]).map(o => [o, workRow(nodes, bl, Object.assign({ round: true, ring, startCorner }, o))]);
+      let best = null, how = null;
+      for (const [o, r] of reads) { const h = stated ? countMatch(stated, r.cnt) : null; if (h) { best = r; best.reading = o; how = h; break; } }
+      if (!best) { // no printed count (or none matches): a starting ch 3 before more dc into the same place counts, by granny convention
+        best = reads[0][1]; best.reading = reads[0][0];
+      }
+      const r = best;
+      if (info.unknown.size) w.push(`ignored “${[...info.unknown].join('”, “')}”.`);
+      w.push(...r.warn);
+      if (r.short) w.push(`works into more spaces than the round below has (${r.short} missing).`);
+      if (r.spLeft) w.push(`${r.spLeft} ch-sp${r.spLeft > 1 ? 's' : ''} of the round below not worked into.`);
+      if (stated && !how) w.push(`stated [${stated.map(p => p.n + (p.unit === 'st' ? '' : ' ' + p.unit)).join(', ')}] but the round makes ${r.cnt.st} sts, ${r.cnt.ch} ch, ${r.cnt.sp} ch-sps.`);
+      const rd = { r: q, acts: r.acts, units: r.units, cnt: r.cnt, got: r.cnt.st, stated: stated ? stated[0].n : null, countAs: how, line: e.li, join: r.join };
+      if (r.reading.chCounts) rd.chCounts = true;
+      if (ring) rd.from = !ringNote && /from\s+(?:the\s+)?hook|\bbase\s+ch/i.test(body) ? 'chain' : 'ring';
+      if (!info.stitches) { rd.unread = { text: e.text, why: 'no stitches this reader knows' }; unread.push(rd.unread); w.push('no stitches this reader knows; this line needs a human.'); }
+      if (w.length) rd.warn = w;
+      w.forEach(x => warns.push(`Rnd ${q}: ${x}`));
+      rounds.push(rd);
+      below = r.units.slice();
+    }
+    if (e.after.length && rounds.length) rounds[rounds.length - 1].after = e.after;
+  }
+  return { kind: 'granny', rounds, warns, unread, lines, before: pre, ring: ringNote ? ringNote.body : null, cand: { type: 'granny', R: Math.max(1, rounds.length), cols: 1, rowsN: 1 } };
+}
+// a pasted pattern: rounds (hats, amigurumi), rows (flat pieces) or a granny square, by what the text says
+function patternKind(text) {
+  const t = String(text), lbl = [...t.matchAll(/^\s*(rows?|r(?:nd|ound)?s?)\.?\s*\d/gim)].map(m => m[1].toLowerCase());
+  const rowsL = lbl.filter(l => /^row/.test(l)).length, rndL = lbl.length - rowsL;
+  const ringy = /\b(?:magic\s+(?:ring|circle|loop)|adjustable\s+ring|\bmr\b|in(?:to)?\s+(?:the\s+)?ring|form\s+a\s+ring)\b/i.test(t);
+  const spaces = (t.match(/\bch[\s-]*\d*[\s-]*sp\b|\bsp(?:ace)?s?\b|\bcorner/gi) || []).length;
+  const groups = /\bch\s*\d+\s*,\s*(?:\d+\s*dc|dc\s*\d+)\s+in(?:to)?\s+(?:the\s+)?(?:same|ring|base|magic)/i.test(t);
+  if (rndL >= rowsL && (groups || spaces >= 2 && (ringy || /\bcorner|granny/i.test(t) || /from\s+(?:the\s+)?hook/i.test(t)))) return 'granny';
+  const found = /^\s*(?:foundation\s*[:.-]?\s*)?ch(?:ain)?\s*\d+/im.test(t) || /^\s*rows?\s*1\b[^\n]*\b(?:from\s+(?:the\s+)?hook|turn)\b/im.test(t);
+  if (rowsL > rndL && found && !ringy) return 'rows';
+  return 'rounds';
+}
+function readPattern(text) {
+  const k = patternKind(text);
+  return k === 'rows' ? parseRows(text) : k === 'granny' ? parseGranny(text) : parsePattern(text);
+}
+
+// the walkthrough of a pasted flat piece or granny square: one step per chain, stitch and slip stitch, each with the index of its line
+const W_ST = { sc: 'sc', hdc: 'hdc', dc: 'dc', tr: 'dc', stdc: 'dc', fpdc: 'fpdc', bpdc: 'bpdc', fpsc: 'sc', bpsc: 'sc' };
+function workSteps(D, granny) {
+  const out = [], push = o => { o.i = out.length; out.push(o); };
+  const unreadStep = (u, r, line) => push({ kind: 'unread', r, row: r, op: 'unread', st: 'unread', made: 0, of: 0, node: -1, text: u.text, why: u.why, line, label: `This line needs a human: “${u.text}”` });
+  const lineOf = t => (D.lines || []).findIndex(l => l.status === 'unread' && l.text === t);
+  (D.before || []).forEach(u => unreadStep(u, 0, lineOf(u.text)));
+  const list = granny ? D.rounds : D.rows, unitW = granny ? 'Rnd' : 'Row';
+  if (!granny && D.foundation) { const F = D.foundation; for (let k = 1; k <= F.ch; k++) push({ kind: 'row', row: 0, op: 'ch', st: 'ch', x: k / F.ch, node: -1, line: F.line, label: `Foundation: ch ${k} of ${F.ch}` }); }
+  if (granny && D.ring) { const m = String(D.ring).match(/ch(?:ain)?\s*(\d+)/i), n = m ? +m[1] : 0; for (let k = 1; k <= n; k++) push({ kind: 'granny', r: 0, op: 'ch', st: 'ch', node: -1, line: 0, label: `Start: ch ${k} of ${n}` }); if (n) push({ kind: 'granny', r: 0, op: 'slst', st: 'slst', node: -1, line: 0, label: 'Start: sl st to the first ch to form a ring' }); }
+  list.forEach((rw, idx) => {
+    const num = granny ? rw.r : rw.row, n = rw.got, where = num === 0 ? 'Foundation row' : `${unitW} ${num}${rw.of ? ` (as ${unitW} ${rw.of})` : ''}`, line = rw.line, r = granny ? idx : num;
+    if (rw.unread) { unreadStep(rw.unread, r, line); (rw.after || []).forEach(u => unreadStep(u, r, lineOf(u.text))); return; }
+    const first = out.length, odd = num % 2 === 1; let made = 0, turned = !granny && idx > 0;
+    const base = o => Object.assign(granny ? { kind: 'granny', r } : { kind: 'row', row: num, x: n ? (odd ? (made - 0.5) / n : 1 - (made - 0.5) / n) : 0.5 }, { node: -1, line, of: n }, o);
+    const chs = (k, note, counts) => { for (let q = 1; q <= k; q++) { if (counts && q === k) made++; push(base({ op: 'ch', st: 'ch', made, label: `${where}: ${q === 1 && turned ? 'turn, ' : ''}ch ${q} of ${k}${note && (q === k || !counts) ? ` (${note})` : ''}` })); turned = false; } };
+    for (const a of rw.acts) {
+      if (a.a === 'tch') chs(a.n, `turning chain, ${a.counts ? 'counts as the first stitch' : 'does not count as a stitch'}`, a.counts);
+      else if (a.a === 'skipch') made++;
+      else if (a.a === 'ch') chs(a.n, a.counts ? 'counts as the first stitch' : a.start ? 'does not count as a stitch' : 'makes a ch-space', a.counts);
+      else if (a.a === 'st') {
+        made++;
+        const into = a.hook ? `into the ${ord(a.hook)} ch from the hook${rw.skipCounts && made === 2 ? ' (the skipped chains count as the first stitch)' : ''}` : a.into === 'sp' ? `into the ${a.corner ? 'corner ' : ''}ch-space` : a.into === 'ring' ? (rw.from === 'chain' ? 'into the chain at the centre' : 'into the ring') : a.into === 'ch' ? 'into the next ch' : a.into === 'top' ? 'into the top of the turning chain' : '';
+        const txt = a.tog ? `${OP_NAME[a.op] || a.op}${a.tog}tog over the next ${a.tog} sts (a decrease)` : `${a.skip ? `skip ${a.skip} st${a.skip > 1 ? 's' : ''}, then ` : ''}${OP_NAME[a.op] || a.op}${a.same ? ' into the same place' : into ? ' ' + into : ''}${rw.loop && a.into !== 'sp' ? ` (${rw.loop} loop only)` : ''}`;
+        const o = base({ op: a.tog ? 'dec' : a.op, st: W_ST[a.op] || 'sc', made, label: `${where}, stitch ${made} of ${n}: ${txt}` }); if (a.tog) o.tog = a.tog;
+        if (a.same) o.into = 'same'; else if (a.into === 'sp') o.into = 'sp'; else if (a.into === 'ring') o.into = 'ring'; if (rw.loop) o.loop = rw.loop;
+        push(o);
+        turned = false;
+      }
+      else if (a.a === 'sl') push(base({ op: 'slst', st: 'slst', made, label: `${where}: sl st into the next ${a.into === 'sp' ? 'ch-space' : 'stitch'}` }));
+      else if (a.a === 'attach') push(base({ op: 'slst', st: 'slst', made, label: `${where}: join the yarn ${a.into === 'sp' ? 'in the ch-space' : 'in the stitch'}` }));
+      else if (a.a === 'join') push(base({ op: 'slst', st: 'slst', made, label: `${where}: sl st to the top of the first stitch to join` }));
+    }
+    for (const s of out.slice(first)) if (s.op !== 'ch' && s.op !== 'slst') { /* x for the flat view is known once the row is done */ if (!granny) s.x = n ? (odd ? (s.made - 0.5) / n : 1 - (s.made - 0.5) / n) : 0.5; }
+    if (rw.warn && out[first]) out[first].warn = rw.warn;
+    if (rw.until && out[out.length - 1]) out[out.length - 1].label += ` · repeat ${rw.until}`;
+    (rw.after || []).forEach(u => unreadStep(u, r, lineOf(u.text)));
+  });
+  return out;
 }
 
 // ---------- flat pieces: layout search ----------
@@ -1215,10 +1743,12 @@ function scarfDrape(L) { return { draped: Math.max(0, (L - 30) / 2), wrapped: Ma
 
 // ---------- walkthrough: the pattern as an ordered list of hook actions ----------
 // One step per stitch made, per chain and per slip-stitch join, in the order you would work them.
-const OP_NAME = { sc: 'sc', hdc: 'hdc', dc: 'dc', fpdc: 'FPdc', bpdc: 'BPdc', inc: 'inc', dec: 'dec', ch: 'ch', slst: 'sl st' };
+const OP_NAME = { sc: 'sc', hdc: 'hdc', dc: 'dc', tr: 'tr', stdc: 'stacked dc', fpdc: 'FPdc', bpdc: 'BPdc', fpsc: 'FPsc', bpsc: 'BPsc', inc: 'inc', dec: 'dec', ch: 'ch', slst: 'sl st' };
 function walkSteps(D) {
   const out = [], s = D.spec;
   const push = o => { o.i = out.length; out.push(o); };
+  if (D.kind === 'rows' && Array.isArray(D.rows)) return workSteps(D, false); /* a pasted flat piece (parseRows) */
+  if (D.kind === 'granny' && Array.isArray(D.rounds)) return workSteps(D, true); /* a pasted granny square (parseGranny) */
   if (D.kind === 'rounds') {
     const joined = s.item === 'hat', counts = countsFromRounds(D.rounds); let node = 0;
     // a line the reader could not follow becomes its own step, shown as "needs a human", never dropped
@@ -1296,19 +1826,21 @@ function phasesFor(step) {
     else if (st === 'hdc') { pre(); at(where, 'Insert the hook'); yo(); pull('Pull up a loop (3 loops on hook)'); thru(3); }
     else { pre(); at(where, where === 'insertFront' ? 'Insert the hook around the post from the front' : where === 'insertBack' ? 'Insert the hook around the post from the back' : 'Insert the hook'); yo(); pull('Pull up a loop (3 loops on hook)'); thru(2, 'Yarn over, pull through 2 (2 left)'); thru(2, 'Yarn over, pull through the last 2'); }
   };
-  if (step.op === 'ch') { yo(); thru(1, 'Pull through the loop on the hook'); }
+  if (step.op === 'tr') { pre(); at('yoKeep', 'Yarn over again', 1); at(ins, 'Insert the hook'); yo(); pull('Pull up a loop (4 loops on hook)'); thru(2, 'Yarn over, pull through 2 (3 left)'); thru(2, 'Yarn over, pull through 2 (2 left)'); thru(2, 'Yarn over, pull through the last 2'); }
+  else if (step.op === 'stdc') { at(ins, 'Insert the hook and make a sc'); yo(); pull('Pull up a loop (2 loops on hook)'); thru(2); at('insert', 'Insert the hook into the left leg of that sc'); yo(); pull('Pull up a loop (2 loops on hook)'); thru(2, 'Yarn over, pull through 2: the stacked dc stands as the first dc'); }
+  else if (step.op === 'ch') { yo(); thru(1, 'Pull through the loop on the hook'); }
   else if (step.op === 'slst') { at('insert', 'Insert the hook'); yo(); at('through', 'Pull through the stitch and the loop on the hook', 0); }
   else if (step.op === 'fpdc') body('dc', 'insertFront');
   else if (step.op === 'bpdc') body('dc', 'insertBack');
   else if (step.op === 'dec') {
-    const k = step.st === 'sc' ? 0 : 1;
-    if (k) pre(); at('insert', 'Insert into the first stitch'); yo(); pull('Pull up a loop');
-    if (step.st === 'dc') thru(2, 'Yarn over, pull through 2');
-    if (k) pre(); at('insertNext', 'Insert into the next stitch'); yo(); pull('Pull up a loop');
-    if (step.st === 'dc') thru(2, 'Yarn over, pull through 2');
+    const k = step.st === 'sc' ? 0 : 1, n = step.tog || 2;
+    for (let q = 0; q < n; q++) { if (k) pre(); at(q ? 'insertNext' : 'insert', q ? 'Insert into the next stitch' : 'Insert into the first stitch'); yo(); pull('Pull up a loop'); if (step.st === 'dc') thru(2, 'Yarn over, pull through 2'); }
     let L = 1; for (const p of P) L += p.d; thru(L, `Yarn over, pull through all ${L} loops`);
   }
   else body(step.st, ins);
+  const ip = P.find(p => /^insert/.test(p.a) && p.a !== 'insertSame' && p.a !== 'insertRing');
+  if (ip && step.into === 'sp') ip.text = 'Insert the hook into the ch-space';
+  else if (ip && step.loop && step.op !== 'stdc') ip.text = `Insert the hook under the ${step.loop} loop only`;
   let L = 1; for (const p of P) { L += p.d; p.loops = L; }
   return P;
 }
@@ -1537,7 +2069,7 @@ function showDesign(D, keepText) {
   const s = D.spec, E = estimate(D);
   $('pieceTitle').textContent = s.item === 'hat' ? HAT_STYLES[s.style] + ' hat' : s.item === 'ami' ? 'Amigurumi ' + SHAPES[s.style].label.toLowerCase() : s.item[0].toUpperCase() + s.item.slice(1);
   $('pieceSub').textContent = `${YARN[s.yarn].name} · ${D.g.hook} mm`;
-  if (D.pasted) { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = `${r1(m.widest)} cm around`; }
+  if (D.pasted && D.kind === 'rounds') { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = `${r1(m.widest)} cm around`; }
   else if (D.kind === 'rounds') { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = s.item === 'hat' ? `${r1(m.brimC)} cm · ${inch(m.brimC)}` : `${r1(m.height)} cm tall`; }
   else { const F = flatDims(D.cand, s, D.g); $('bSize').textContent = `${Math.round(F.W)} × ${Math.round(F.L)} cm`; }
   $('bYarn').textContent = `${Math.round(E.m)} m · ${Math.round(E.yd)} yd`; showYarn(D);
@@ -1552,7 +2084,7 @@ function updateStats() {
   $('sEvals').textContent = fmtN(O.evals); $('sGen').textContent = fmtN(O.gen); $('sRate').textContent = fmtN(S.lastRate);
   const D = S.D; if (!D) return;
   let miss, txt;
-  if (D.pasted) { const gs = D.pasted.gates, ok = gs.filter(G => G.status === 'ok').length, checked = gs.filter(G => G.status === 'ok' || G.status === 'bad').length; miss = checked - ok ? 9 : 0; txt = `${ok}/${checked}`; $('sErrK').textContent = 'rounds matching their printed count'; }
+  if (D.pasted) { const gs = D.pasted.gates, ok = gs.filter(G => G.status === 'ok').length, checked = gs.filter(G => G.status === 'ok' || G.status === 'bad').length; miss = checked - ok ? 9 : 0; txt = `${ok}/${checked}`; $('sErrK').textContent = (D.kind === 'rows' ? 'rows' : 'rounds') + ' matching their printed count'; }
   else if (D.kind === 'rounds' && !(S.P && (S.P.R === D.counts.length))) { miss = 0; txt = '–'; $('sErrK').textContent = 'avg miss per round'; }
   else if (D.kind === 'rounds') { const P = D.counts.length === S.P.R ? S.P : roundPlan(D.spec, D.g); const p = evaluate(D.counts, P.R === D.counts.length ? P : S.P, S.lambda, true); miss = p.rms * TAU; txt = '±' + miss.toFixed(1) + ' st'; $('sErrK').textContent = 'avg miss per round'; }
   else { const T = flatTarget(D.spec), F = flatDims(D.cand, D.spec, D.g); miss = Math.max(Math.abs(F.W - T.W), Math.abs(F.L - T.L)); txt = '±' + miss.toFixed(1) + ' cm'; $('sErrK').textContent = 'size miss'; }
@@ -1941,7 +2473,10 @@ function buildScene(D) {
   box.min.y = Math.min(box.min.y, 0);
   const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3()), ext = Math.max(size.x, size.y, size.z);
   const ms = Math.max(60, Math.ceil(Math.max(size.x, size.z) * 1.8 / 10) * 10 + 20); G.root.add(matGrid(ms));
-  if (S.fit) { const dist = ext * 1.35 / Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) * 0.62 + 10; G.controls.target.copy(ctr); G.camera.position.set(ctr.x + dist * 0.55, ctr.y + dist * 0.38, ctr.z + dist * 0.75); G.controls.update(); S.fit = false; }
+  if (S.fit) { const dist = ext * 1.35 / Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) * 0.62 + Math.min(10, ext * 1.5); // small pieces (a 3 cm ball) get less padding so they fill the view
+    // on a phone the close-up inset covers the lower half of the view while the walkthrough is on: lift the piece into the upper part
+    const lift = (W.on || (S.D && S.D.pasted)) && D.kind === 'rounds' && $('mat').getBoundingClientRect().width < 700 ? dist * 0.16 : 0; // not for cloth: a draped sheet sits high already
+    G.controls.target.set(ctr.x, ctr.y - lift, ctr.z); G.camera.position.set(ctr.x + dist * 0.55, ctr.y + dist * 0.38 - lift, ctr.z + dist * 0.75); G.controls.update(); S.fit = false; }
   updateMeshes();
 }
 function texCanvas(D) {
@@ -2018,7 +2553,8 @@ function updateMeshes() {
 function scaleBar() {
   const r = $('mat').getBoundingClientRect(), dist = G.camera.position.distanceTo(G.controls.target), cmPerPx = 2 * dist * Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) / Math.max(1, r.height);
   let L = 1; for (const c of [1, 2, 5, 10, 20, 50, 100, 200]) if (c / cmPerPx <= 150) L = c;
-  $('scaleBar').style.width = Math.round(L / cmPerPx) + 'px'; $('scaleLbl').textContent = L >= 100 ? L / 100 + ' m' : L + ' cm';
+  const bw = Math.round(L / cmPerPx); $('scaleBar').style.width = bw + 'px'; $('topinfo').style.maxWidth = Math.max(110, r.width - bw - 44) + 'px'; // keep the label clear of the bar
+  $('scaleLbl').textContent = L >= 100 ? L / 100 + ' m' : L + ' cm';
 }
 
 // ---------- loop ----------
@@ -2395,9 +2931,52 @@ R5: (sc, dec) x6 [12]
 Stuff the ball firmly.
 R6: dec x6 [6]
 Fasten off, weave the tail through the front loops and pull tight.`;
+// "Read 6 rounds: 5 match their printed count." Clauses with a zero are left out.
+function pasteTally(total, n, noun = 'round') {
+  const parts = [];
+  if (n.ok) parts.push(`<b>${n.ok}</b> match their printed count`);
+  if (n.bad) parts.push(`<b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not`);
+  if (n.none) parts.push(`${n.none} print${n.none === 1 ? 's' : ''} no count`);
+  return `Read ${total} ${noun}${total === 1 ? '' : 's'}${parts.length ? ': ' + parts.join(', ') : ''}.`;
+}
+// a rows or granny paste: the reader's rows (or rounds) become count gates, the flat or granny model drives the 3D view
+function flatGates(P) {
+  return (P.kind === 'rows' ? P.rows : P.rounds).map(r => {
+    const rows = P.kind === 'rows', status = r.unread ? 'human' : r.stated == null ? 'none' : r.countAs ? 'ok' : 'bad';
+    return { line: r.line == null ? -1 : r.line, label: rows ? (r.row ? `Row ${r.row}` : 'Foundation') : `Rnd ${r.r}`, stated: r.stated, got: status === 'ok' ? r.stated : r.got, status, key: rows ? r.row : r.r - 1 };
+  });
+}
+function pasteReadFlat(P, text) {
+  const gates = flatGates(P), rows = P.kind === 'rows', noun = rows ? 'row' : 'round';
+  const det = pasteDetect(P), ov = PASTE_OV || {}, found = ov.yarn != null || det.yarn != null;
+  const yarn = ov.yarn != null ? ov.yarn : det.yarn != null ? det.yarn : 4;
+  const hook = ov.hook || det.hook || YARN[yarn].hook;
+  const spec = normalizeSpec({ item: 'blanket', style: 'pasted', yarn, hook, set: { item: true, yarn: true, hook: true } }); // a box sized to the piece: a scarf's 55 cm rod would dwarf a washcloth
+  spec.style = 'pasted'; spec.cal = typeof calActive === 'function' ? calActive() : null;
+  const g = gaugeOf(spec);
+  PASTE = { res: P, gates, joined: false, text, assumed: [], kind: P.kind };
+  S.dirty = false; if (S.running) { S.running = false; updateGo(); }
+  S.user = true; S.fit = true; S.spec = spec; S.g = g;
+  showDesign(Object.assign({}, P, { spec, g, pasted: PASTE }), true);
+  if (typeof renderFields === 'function') renderFields();
+  $('pattern').value = text; $('warns').innerHTML = P.warns.map(w => `<div>${esc(w)}</div>`).join('');
+  $('pieceTitle').textContent = 'Pasted pattern'; $('patNote').textContent = rows ? 'turned rows' : 'granny rounds';
+  const n = { ok: 0, bad: 0, none: 0, human: 0 }; gates.forEach(G => n[G.status]++);
+  const humanSet = new Set(); gates.forEach(G => { if (G.status === 'human') humanSet.add(G.line >= 0 ? G.line : 'g' + G.key); }); P.lines.forEach((l, i) => { if (l.status === 'unread') humanSet.add(i); });
+  const humanLines = humanSet.size, humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.`;
+  $('pasteNote').innerHTML = `${pasteTally(gates.length, n, noun)} ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  pasteSetFill(yarn, hook);
+  $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
+  updateGo('your pattern');
+  W.playing = false; $('wPlay').textContent = 'Play';
+  if (!W.on) walkToggle(true); else { W.i = 0; walkSetup(); }
+  if (window.innerWidth < 1060) $('mat').scrollIntoView({ block: 'start' });
+}
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
-  const res = parsePattern(text), rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
+  const P0 = typeof readPattern === 'function' ? readPattern(text) : parsePattern(text);
+  if (P0.kind === 'rows' || P0.kind === 'granny') return pasteReadFlat(P0, text);
+  const res = P0, rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
   const joined = rounds.some(r => r.join), assumed = [];
   // an unread round that prints a count: stand in plain stitches (even inc or dec) so the shape carries on at that count.
   // The round stays a "needs a human" step; the schematic draws it dashed. With no printed count it stays a gap, labelled.
@@ -2428,7 +3007,7 @@ function pasteRead() {
   const looseLines = res.lines.filter(l => l.status === 'unread').length, humanLines = n.human + looseLines; // a round line the reader found no stitches in counts too
   const standIn = assumed.filter(x => x === 'count').length, carried = assumed.filter(x => x === 'carry').length;
   const humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human${standIn ? `, ${standIn === 1 ? 'one' : standIn} drawn from ${standIn === 1 ? 'its' : 'their'} printed count` : ''}${carried ? `, ${carried === 1 ? 'one' : carried} kept at the round before` : ''}.`;
-  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  $('pasteNote').innerHTML = `${pasteTally(counts.length, n)} ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
   pasteSetFill(yarn, hook);
   $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
   updateGo('your pattern');
@@ -2442,6 +3021,18 @@ function pasteRead() {
 function pastedSteps(D) {
   const P = D.pasted, out = [], clip = t => (t.length > 140 ? t.slice(0, 140) + '…' : t);
   const lineIdx = t => P.res.lines.findIndex(l => l.status === 'unread' && l.text === t);
+  if (D.kind === 'rows' || D.kind === 'granny') { // rows and granny steps carry their own line; the gate sits at the end of each row or round
+    const rows = D.kind === 'rows', list = rows ? D.rows : D.rounds;
+    for (const s of walkSteps(D)) {
+      const key = s.kind === 'row' ? s.row : s.kind === 'granny' ? s.r : -1, G = P.gates.find(x => x.key === key), ent = list.find((x, i) => P.gates[i] && P.gates[i].key === key);
+      if (s.op === 'unread') { s.human = true; if (s.line == null || s.line < 0) { const li = lineIdx(s.text); s.line = li >= 0 ? li : G ? G.line : -1; } s.label = `Needs a human: “${clip(s.text)}” (${s.why}). Read it yourself, then step on.`; out.push(s); continue; }
+      if (ent && ent.unread) continue;
+      if (s.line == null) s.line = G ? G.line : -1;
+      if (G && s.made === s.of && s.of > 0 && s.op !== 'ch' && s.op !== 'slst') s.label += ` · ${gateText(G)}`;
+      out.push(s);
+    }
+    out.forEach((s, i) => (s.i = i)); return out;
+  }
   for (const s of walkSteps({ kind: 'rounds', spec: { item: 'ami' }, rounds: D.rounds })) {
     const rd = D.rounds[s.r], G = P.gates[s.r];
     if (s.op === 'unread') { const li = lineIdx(s.text); s.human = true; s.line = li >= 0 ? li : G ? G.line : -1; s.label = `Needs a human: “${clip(s.text)}” (${s.why}). Read it yourself, then step on.`; out.push(s); continue; }

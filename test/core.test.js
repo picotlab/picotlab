@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const src = fs.readFileSync(process.argv[2] || path.join(__dirname, '../index.html'), 'utf8');
 const core = src.slice(src.indexOf('// CORE-START'), src.indexOf('// CORE-END'));
-const C = new Function(core + '; return { YARN, ST, gaugeOf, parsePrompt, normalizeSpec, specToPrompt, roundPlan, runGA, makeGA, gaStep, planSeed, evaluate, roundsFromCounts, formatRounds, parsePattern, countsFromRounds, designFlat, flatDims, formatFlat, parseFlat, estimate, roundsSummary, swatchGauge, profileBase, fitCorrection, lsScale, maskFromImage, maskFromPolygon, profileFromMask, shapeFromProfile, SHAPES, abbreviationsFor, skillLevel, swatchFor, splitLine, colourSeq, colourAt, colourYardage, parseSeq, fitCheck, fitTable, scarfDrape, walkSteps, phasesFor, lineForStep, parseBody, statedCountOf, produces, EXAMPLES: typeof EXAMPLES !== "undefined" ? EXAMPLES : null };')();
+const C = new Function(core + '; return { YARN, ST, gaugeOf, parsePrompt, normalizeSpec, specToPrompt, roundPlan, runGA, makeGA, gaStep, planSeed, evaluate, roundsFromCounts, formatRounds, parsePattern, countsFromRounds, designFlat, flatDims, formatFlat, parseFlat, estimate, roundsSummary, swatchGauge, profileBase, fitCorrection, lsScale, maskFromImage, maskFromPolygon, profileFromMask, shapeFromProfile, SHAPES, abbreviationsFor, skillLevel, swatchFor, splitLine, colourSeq, colourAt, colourYardage, parseSeq, fitCheck, fitTable, scarfDrape, walkSteps, phasesFor, lineForStep, parseBody, statedCountOf, produces, parseRows: typeof parseRows !== "undefined" ? parseRows : null, parseGranny: typeof parseGranny !== "undefined" ? parseGranny : null, readPattern: typeof readPattern !== "undefined" ? readPattern : null, workCount: typeof workCount !== "undefined" ? workCount : null, EXAMPLES: typeof EXAMPLES !== "undefined" ? EXAMPLES : null };')();
 let fail = 0, pass = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log('FAIL', msg); } };
 const spec = t => C.normalizeSpec(C.parsePrompt(t));
@@ -250,6 +250,9 @@ for (const t of ['amigurumi egg 8 cm tall in dk', 'amigurumi ball 10 cm tall in 
   { const p = PP('Round 1: Ch 1, make 9 hdc in ring, join in first hdc (9)\nRound 2: Ch 1, 2hdc in each stitch around (18)'), W = C.walkSteps({ kind: 'rounds', spec: spec('beanie in hdc'), rounds: p.rounds });
     ok(W.filter(s => s.op === 'ch').length === 2 && W.filter(s => s.node > 0).length === 27, 'pasted ch 1 rounds walk with ch 1, not the hdc default ch 2'); }
   ok(C.statedCountOf('Round 6 - 10: Ch 1, hdc around, join (45) - Fasten off after Round 10') === 45 && C.statedCountOf('[Inc, sc] 2 times. {32}') === 32 && C.statedCountOf('(sc, inc) 6 times') === null, 'printed counts anywhere in the line');
+  // per-round printed count and source line (for the app's count gates)
+  { const p = PP('R1: 6 sc in mr\nR2: inc around [12]\nR3: *sc, inc;\nrepeat from * around (18)\nRnd 4-5: sc around\nFasten off.');
+    ok(p.rounds.map(r => r.stated).join() === ',12,18,,' && p.rounds.map(r => r.line).join() === '0,1,2,4,4' && p.lines[3].status === 'merged', 'rd.stated and rd.line: ' + p.rounds.map(r => r.stated + '@' + r.line)); }
   // the spike fixtures, pasted whole: every printed round count recovered (rounds families)
   const FX = (process.env.PICOTLAB_FIXTURES || path.join(__dirname, 'fixtures/patterns'));
   if (!fs.existsSync(FX)) console.log('SKIP fixture paste tests: no pattern fixtures at ' + path.relative(process.cwd(), FX) + ' (set PICOTLAB_FIXTURES to a folder of NN-*.txt fixtures)');
@@ -259,6 +262,53 @@ for (const t of ['amigurumi egg 8 cm tall in dk', 'amigurumi ball 10 cm tall in 
     p.rounds.forEach((rd, i) => { if (rd.warn && rd.warn.some(w => /stated/.test(w))) bad.push('R' + (i + 1)); });
     ok(!bad.length, `fixture ${f}: printed counts all match (${got.join(' ')}) ${bad}`);
   }
+}
+
+// 17. rows and granny squares (H-53): stitches worked into the row below; the printed count is the gate
+if (C.readPattern) {
+  const RP = t => C.readPattern(t), got = p => (p.rows || p.rounds).map(r => r.got).join();
+  const noWarn = p => !p.warns.length;
+  // plain sc rows, a foundation chain line, "repeat row 2 until you have N rows"
+  { const p = RP('Ch 21.\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (20)\nRow 2: Ch 1, sc in each st across, turn. (20)\nRepeat Row 2 until you have 30 rows.');
+    ok(p.kind === 'rows' && p.rows.length === 30 && p.rows.every(r => r.got === 20) && noWarn(p) && p.foundation.ch === 21, 'sc rows, repeat to 30 rows: ' + p.rows.length + ' ' + p.warns);
+    const W = C.walkSteps(Object.assign({ spec: spec('scarf') }, p)), r1 = W.filter(s => s.row === 1 && s.op === 'sc');
+    ok(W.filter(s => s.row === 0).length === 21 && r1.length === 20 && /2nd ch from the hook/.test(r1[0].label) && W.find(s => s.row === 2).label.includes('turn, ch 1 of 1') && W.every(s => s.line >= 0), 'row walk: foundation, row 1 from the hook, turning chain, every step has a line');
+    ok(r1[0].x < r1[19].x && W.filter(s => s.row === 2 && s.op === 'sc')[0].x > 0.9, 'turned rows run back the other way'); }
+  // "skipped chains count as a dc", a turning chain that counts and stands on the first stitch
+  { const p = RP('Ch 15\nRow 1: Dc in 4th ch from hook and in each ch across, turn. (13)\nRow 2: Ch 3 (counts as dc), dc in next st and in each st across, turn. (13)');
+    ok(got(p) === '13,13' && noWarn(p) && p.rows[0].skipCounts && p.rows[1].tchCounts, 'skipped chains and ch 3 count as a dc: ' + got(p) + ' ' + p.warns); }
+  // a V-stitch row with a ch-space count, then a row into each st and ch-sp; ranges of rows repeated
+  { const p = RP('Ch 21\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (20)\nRow 2: Ch 3 (counts as dc), sk next st, *(dc, ch 1, dc) in next st, sk next st; rep from * across to last st, dc in last st, turn. (20 dc, 9 ch-1 sps)\nRow 3: Ch 1, sc in each dc and ch-sp across, turn. (29)');
+    ok(got(p) === '20,20,29' && p.rows[1].cnt.sp === 9 && noWarn(p), 'V-st row and ch-spaces: ' + got(p) + ' ' + p.warns);
+    const W = C.walkSteps(Object.assign({ spec: spec('scarf') }, p)), sp = W.find(s => s.row === 3 && s.into === 'sp');
+    ok(sp && C.phasesFor(sp).some(f => /ch-space/.test(f.text)), 'stitch into a ch-space is taught as such'); }
+  { const p = RP('Ch 21\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (20)\nRow 2: Ch 1, sc in back loop of each st across, turn. (20)\nRow 3: Ch 1, sc in front loop of each st across, turn. (20)\nRepeat Rows 2-3 4 more times.');
+    ok(p.rows.length === 11 && p.rows.map(r => r.loop || '-').join('').startsWith('-backfrontbackfront') && p.rows[10].of === 3 && noWarn(p), 'BLO/FLO rows and "repeat rows 2-3 4 more times": ' + p.rows.length + ' ' + p.warns); }
+  // stacked dc as the first stitch; no printed count: the row keeps the count below
+  { const p = RP('Chain 23.\nRow 1: Dc in 4th ch from hook (skipped 3 chains count as dc) and in each ch across, turn. (21 dc)\nRow 2: Stacked dc in first st, dc in each st across, turn.');
+    const W = C.walkSteps(Object.assign({ spec: spec('scarf') }, p)), sd = W.find(s => s.op === 'stdc');
+    ok(got(p) === '21,21' && noWarn(p) && sd && /left leg/.test(C.phasesFor(sd).map(f => f.text).join()), 'stacked dc: ' + got(p) + ' ' + p.warns); }
+  // a mismatch is flagged and the next row reads against the printed count; a line with no stitches needs a human
+  { const p = RP('Ch 11\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (12)\nRow 2: Ch 1, sc in each st across, turn. (12)\nRow 3: work the bobble pattern as charted.');
+    ok(p.rows[0].warn && /stated \[12\]/.test(p.rows[0].warn.join()) && p.rows[1].got === 12 && p.rows[2].unread, 'row count mismatch flagged, no cascade, unread row kept');
+    const W = C.walkSteps(Object.assign({ spec: spec('scarf') }, p)); ok(W.some(s => s.op === 'unread' && s.line === 3) && W.find(s => s.row === 1).warn, 'row walk: warning on the row\'s first step, unread step on its line'); }
+  // granny square from a ring: corners, ch-1 sides, sl st moves, compound counts
+  { const g = RP('Ch 4, sl st to form a ring.\nRnd 1: Ch 3 (counts as dc), 2 dc in ring, ch 2, *3 dc in ring, ch 2; rep from * 2 more times, join with sl st to top of ch-3. (12 dc, 4 ch-2 sps)\nRnd 2: Sl st in next 2 dc and in next ch-2 sp, ch 3, (2 dc, ch 2, 3 dc) in same sp, ch 1, *(3 dc, ch 2, 3 dc) in next ch-2 sp, ch 1; rep from * 2 more times, join with sl st to top of ch-3. (24 dc, 4 ch-2 sps, 4 ch-1 sps)\nRnd 3: Sl st in next 2 dc and in next ch-2 sp, ch 3, (2 dc, ch 2, 3 dc) in same sp, ch 1, *3 dc in next ch-1 sp, ch 1, (3 dc, ch 2, 3 dc) in next ch-2 sp, ch 1; rep from * 2 more times, 3 dc in next ch-1 sp, ch 1, join with sl st to top of ch-3. (12 clusters)');
+    ok(g.kind === 'granny' && got(g) === '12,24,36' && noWarn(g) && g.rounds[2].countAs === 'cl' && g.rounds.every(r => r.cnt.corner === 4), 'granny rounds, counted in dc + spaces and in clusters: ' + got(g) + ' ' + g.warns);
+    const W = C.walkSteps(Object.assign({ spec: spec('granny square blanket') }, g));
+    ok(W.filter(s => s.op === 'dc').length === 69 && W.filter(s => s.r === 1 && s.op === 'slst').length === 4 && W.some(s => /corner ch-space/.test(s.label)) && W[0].label.startsWith('Start: ch 1 of 4'), 'granny walk: ring, sl st moves, corners named (69 dc + 3 counted ch 3)');
+    const q = RP('Round 1: Ch 3, dc 2 in 3rd ch from hook, *ch 2, dc 3 in same ch*, repeat from * to * 2 more times, ch 2, sl st in top of ch 3 (=20 st).');
+    ok(got(q) === '12' && q.rounds[0].countAs === 'st+ch' && q.rounds[0].chCounts, 'granny round from a chain, "(=20 st)" counts the chains: ' + got(q) + ' ' + q.warns); }
+  // decreases in rows (H-53b): Xn-tog makes one stitch over n; "to last 2 sts" leaves them for the decrease
+  { const p = RP('Ch 16\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (15)\nRow 2: Ch 1, sc2tog, sc in each st to last 2 sts, sc2tog, turn. (13 sc)\nRow 3: Ch 2, hdc3tog, hdc in each st across, turn. (11)\nRow 4: Ch 1, dec, sc in each st across, turn. (10)\nRow 5: Ch 3 (counts as dc), dc in each st to last 3 sts, dc3tog. (8)');
+    ok(got(p) === '15,13,11,10,8' && noWarn(p), 'row decreases sc2tog / hdc3tog / dec / dc3tog: ' + got(p) + ' ' + p.warns);
+    const W = C.walkSteps(Object.assign({ spec: spec('scarf') }, p)), d3 = W.find(s => s.op === 'dec' && s.tog === 3);
+    ok(d3 && /hdc3tog over the next 3 sts/.test(d3.label) && C.phasesFor(d3).filter(f => /^insert/.test(f.a)).length === 3 && /all 5 loops|all 7 loops/.test(C.phasesFor(d3).map(f => f.text).join()), 'decrease step: label and one insert per stitch: ' + (d3 && d3.label)); }
+  { const g = RP('Rnd 1: Ch 3 (counts as dc), 2 dc in ring, ch 2, *3 dc in ring, ch 2; rep from * 2 more times, join with sl st to top of ch-3. (12 dc, 4 ch-2 sps)\nRnd 2: Sl st in next 2 dc, sl st to corner sp, ch 3, (2 dc, ch 2, 3 dc) in same corner space, ch 1, *(3 dc, ch 2, 3 dc) in next corner ch-sp, ch 1; rep from * 2 more times, join with sl st to top of ch-3. (24 dc, 8 sps)');
+    ok(got(g) === '12,24' && !g.rounds[1].warn && g.rounds[1].acts.filter(a => a.a === 'sl').length === 3, 'granny: sl st to corner sp is a move into the space: ' + got(g) + ' ' + g.warns); }
+  ok(JSON.stringify(C.workCount('Row 2: … (20 dc, 9 ch-1 sps)')) === '[{"n":20,"unit":"st"},{"n":9,"unit":"sp"}]' && C.workCount('turn — 31 dc.')[0].n === 31 && C.workCount('(2 dc) in next st') === null, 'printed counts with units');
+  // the kind is read from the text: "Row" labels on a magic ring are still rounds
+  ok(RP('Row 1: 6 sc in magic ring\nRow 2: inc around [12]').kind === 'rounds' && RP('R1: 6 sc in mr\nR2: inc around [12]').kind === 'rounds', 'rounds stay rounds');
 }
 
 // 16. deterministic GA (H-35): one spec, one pattern

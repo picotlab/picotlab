@@ -199,7 +199,7 @@ function showDesign(D, keepText) {
   const s = D.spec, E = estimate(D);
   $('pieceTitle').textContent = s.item === 'hat' ? HAT_STYLES[s.style] + ' hat' : s.item === 'ami' ? 'Amigurumi ' + SHAPES[s.style].label.toLowerCase() : s.item[0].toUpperCase() + s.item.slice(1);
   $('pieceSub').textContent = `${YARN[s.yarn].name} · ${D.g.hook} mm`;
-  if (D.pasted) { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = `${r1(m.widest)} cm around`; }
+  if (D.pasted && D.kind === 'rounds') { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = `${r1(m.widest)} cm around`; }
   else if (D.kind === 'rounds') { const m = roundsSummary(D.counts, D.st, D.g, s); $('bSize').textContent = s.item === 'hat' ? `${r1(m.brimC)} cm · ${inch(m.brimC)}` : `${r1(m.height)} cm tall`; }
   else { const F = flatDims(D.cand, s, D.g); $('bSize').textContent = `${Math.round(F.W)} × ${Math.round(F.L)} cm`; }
   $('bYarn').textContent = `${Math.round(E.m)} m · ${Math.round(E.yd)} yd`; showYarn(D);
@@ -214,7 +214,7 @@ function updateStats() {
   $('sEvals').textContent = fmtN(O.evals); $('sGen').textContent = fmtN(O.gen); $('sRate').textContent = fmtN(S.lastRate);
   const D = S.D; if (!D) return;
   let miss, txt;
-  if (D.pasted) { const gs = D.pasted.gates, ok = gs.filter(G => G.status === 'ok').length, checked = gs.filter(G => G.status === 'ok' || G.status === 'bad').length; miss = checked - ok ? 9 : 0; txt = `${ok}/${checked}`; $('sErrK').textContent = 'rounds matching their printed count'; }
+  if (D.pasted) { const gs = D.pasted.gates, ok = gs.filter(G => G.status === 'ok').length, checked = gs.filter(G => G.status === 'ok' || G.status === 'bad').length; miss = checked - ok ? 9 : 0; txt = `${ok}/${checked}`; $('sErrK').textContent = (D.kind === 'rows' ? 'rows' : 'rounds') + ' matching their printed count'; }
   else if (D.kind === 'rounds' && !(S.P && (S.P.R === D.counts.length))) { miss = 0; txt = '–'; $('sErrK').textContent = 'avg miss per round'; }
   else if (D.kind === 'rounds') { const P = D.counts.length === S.P.R ? S.P : roundPlan(D.spec, D.g); const p = evaluate(D.counts, P.R === D.counts.length ? P : S.P, S.lambda, true); miss = p.rms * TAU; txt = '±' + miss.toFixed(1) + ' st'; $('sErrK').textContent = 'avg miss per round'; }
   else { const T = flatTarget(D.spec), F = flatDims(D.cand, D.spec, D.g); miss = Math.max(Math.abs(F.W - T.W), Math.abs(F.L - T.L)); txt = '±' + miss.toFixed(1) + ' cm'; $('sErrK').textContent = 'size miss'; }
@@ -603,7 +603,10 @@ function buildScene(D) {
   box.min.y = Math.min(box.min.y, 0);
   const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3()), ext = Math.max(size.x, size.y, size.z);
   const ms = Math.max(60, Math.ceil(Math.max(size.x, size.z) * 1.8 / 10) * 10 + 20); G.root.add(matGrid(ms));
-  if (S.fit) { const dist = ext * 1.35 / Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) * 0.62 + 10; G.controls.target.copy(ctr); G.camera.position.set(ctr.x + dist * 0.55, ctr.y + dist * 0.38, ctr.z + dist * 0.75); G.controls.update(); S.fit = false; }
+  if (S.fit) { const dist = ext * 1.35 / Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) * 0.62 + Math.min(10, ext * 1.5); // small pieces (a 3 cm ball) get less padding so they fill the view
+    // on a phone the close-up inset covers the lower half of the view while the walkthrough is on: lift the piece into the upper part
+    const lift = (W.on || (S.D && S.D.pasted)) && D.kind === 'rounds' && $('mat').getBoundingClientRect().width < 700 ? dist * 0.16 : 0; // not for cloth: a draped sheet sits high already
+    G.controls.target.set(ctr.x, ctr.y - lift, ctr.z); G.camera.position.set(ctr.x + dist * 0.55, ctr.y + dist * 0.38 - lift, ctr.z + dist * 0.75); G.controls.update(); S.fit = false; }
   updateMeshes();
 }
 function texCanvas(D) {
@@ -680,7 +683,8 @@ function updateMeshes() {
 function scaleBar() {
   const r = $('mat').getBoundingClientRect(), dist = G.camera.position.distanceTo(G.controls.target), cmPerPx = 2 * dist * Math.tan(THREE.MathUtils.degToRad(G.camera.fov / 2)) / Math.max(1, r.height);
   let L = 1; for (const c of [1, 2, 5, 10, 20, 50, 100, 200]) if (c / cmPerPx <= 150) L = c;
-  $('scaleBar').style.width = Math.round(L / cmPerPx) + 'px'; $('scaleLbl').textContent = L >= 100 ? L / 100 + ' m' : L + ' cm';
+  const bw = Math.round(L / cmPerPx); $('scaleBar').style.width = bw + 'px'; $('topinfo').style.maxWidth = Math.max(110, r.width - bw - 44) + 'px'; // keep the label clear of the bar
+  $('scaleLbl').textContent = L >= 100 ? L / 100 + ' m' : L + ' cm';
 }
 
 // ---------- loop ----------
