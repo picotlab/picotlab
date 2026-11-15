@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const src = fs.readFileSync(process.argv[2] || path.join(__dirname, '../index.html'), 'utf8');
 const core = src.slice(src.indexOf('// CORE-START'), src.indexOf('// CORE-END'));
-const C = new Function(core + '; return { YARN, ST, gaugeOf, parsePrompt, normalizeSpec, specToPrompt, roundPlan, runGA, makeGA, gaStep, planSeed, evaluate, roundsFromCounts, formatRounds, parsePattern, countsFromRounds, designFlat, flatDims, formatFlat, parseFlat, estimate, roundsSummary, swatchGauge, profileBase, fitCorrection, lsScale, maskFromImage, maskFromPolygon, profileFromMask, shapeFromProfile, SHAPES, abbreviationsFor, skillLevel, swatchFor, splitLine, colourSeq, colourAt, colourYardage, parseSeq, fitCheck, fitTable, scarfDrape, walkSteps, phasesFor, lineForStep, parseBody, statedCountOf, produces, parseRows: typeof parseRows !== "undefined" ? parseRows : null, parseGranny: typeof parseGranny !== "undefined" ? parseGranny : null, readPattern: typeof readPattern !== "undefined" ? readPattern : null, workCount: typeof workCount !== "undefined" ? workCount : null, EXAMPLES: typeof EXAMPLES !== "undefined" ? EXAMPLES : null };')();
+const C = new Function(core + '; return { YARN, ST, gaugeOf, parsePrompt, normalizeSpec, specToPrompt, roundPlan, runGA, makeGA, gaStep, planSeed, evaluate, roundsFromCounts, formatRounds, parsePattern, countsFromRounds, designFlat, flatDims, formatFlat, parseFlat, estimate, roundsSummary, swatchGauge, profileBase, fitCorrection, lsScale, maskFromImage, maskFromPolygon, profileFromMask, shapeFromProfile, SHAPES, abbreviationsFor, skillLevel, swatchFor, splitLine, colourSeq, colourAt, colourYardage, parseSeq, fitCheck, fitTable, scarfDrape, walkSteps, phasesFor, lineForStep, parseBody, statedCountOf, produces, parseRows: typeof parseRows !== "undefined" ? parseRows : null, parseGranny: typeof parseGranny !== "undefined" ? parseGranny : null, readPattern: typeof readPattern !== "undefined" ? readPattern : null, workCount: typeof workCount !== "undefined" ? workCount : null, EXAMPLES: typeof EXAMPLES !== "undefined" ? EXAMPLES : null, explain: typeof explain !== "undefined" ? explain : null, checkPattern: typeof checkPattern !== "undefined" ? checkPattern : null };')();
 let fail = 0, pass = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log('FAIL', msg); } };
 const spec = t => C.normalizeSpec(C.parsePrompt(t));
@@ -321,6 +321,74 @@ if (C.readPattern) {
   ok([...C.runGA(P, 0.7, 1500, 42).best].join() === [...C.runGA(P, 0.7, 1500, 42).best].join(), 'an explicit seed reproduces');
   const P2 = C.roundPlan(spec('beanie for a 58 cm head in worsted'), g); ok(C.planSeed(P2) !== C.planSeed(P), 'different spec, different seed');
   const code = core.replace(/\/\/[^\n]*/g, ''); ok(!/Math\.random\s*\(/.test(code), 'no Math.random in CORE');
+}
+// 17. explain and check (H-63, H-64): a pasted term or line in plain words, with the hook target and the count; a fail-loud check before steps
+if (C.explain && C.checkPattern) {
+  const E = C.explain, K = C.checkPattern, has = (e, re) => re.test(e.text), ids = e => e.terms.map(t => t.id).join();
+  // terms, one by one
+  ok(has(E('flo'), /front loop only/i) && ids(E('FLO')) === 'flo', 'flo');
+  ok(has(E('blo'), /back loop only/i), 'blo');
+  { const e = E('Rnd 12: in flo of next four stitches'); ok(e.kind === 'line' && e.count.made === 4 && /each of the next 4 stitches/.test(e.text) && /front loop only/.test(e.text), 'flo on the poster line: front loop of each of the next 4: ' + e.text.slice(-200)); }
+  { const e = E('Rows 9-18: work even'); ok(ids(e) === 'even' && e.count.rows === 10 && /no (?:shaping|increases)/i.test(e.text) && /same number of stitches/.test(e.text) && !e.needsHuman, 'work even: 10 rows, same count: ' + e.text.slice(-160)); }
+  ok(ids(E('RS')) === 'rsws' && /right side/i.test(E('RS').text) && /wrong side/i.test(E('WS').text), 'RS / WS');
+  { const e = E('Chain 124 loosely.\nRow 1 (WRONG SIDE):'); ok(e.sides[0] === 'WS' && e.count.chains === 124 && !e.needsHuman, 'a label on a later line is read too (T1 #27)'); }
+  { const e = E('Row 1 (WRONG SIDE):'); ok(e.sides[0] === 'WS' && /wrong side/i.test(e.text) && !e.needsHuman, 'WRONG SIDE in a row label: ' + e.text.slice(0, 80)); }
+  ok(/slip stitch/i.test(E('ss').text) && /slip stitch/i.test(E('sl st').text) && E('ss').uk.length === 1, 'ss and sl st');
+  { const e = E('Ss in each of next 3 ch'); ok(/slip stitch/.test(e.parts[0].say) && /each of the next 3 chains/.test(e.parts[0].hook) && e.count.used === 3 && e.count.made === 0, 'ss in each of next 3 ch: ' + JSON.stringify(e.parts[0])); }
+  ok(/closes it into a ring/i.test(E('joining round').text) && /first stitch/.test(E('joining round').text), 'joining round');
+  { const e = E('rep from * twice more.'); ok(ids(e).includes('star') && /three times in all/.test(e.text), 'star: twice more = three times in all'); }
+  { const e = E('*sc in next 2 sts, 2 sc in next st; rep from * to end'); ok(e.parts[0].node === 'rep' && /to the end of the row/.test(e.parts[0].say) && e.count.exact === false && /depends on how many/.test(e.text), 'rep from * to end: count depends on the row'); }
+  { const e = E('*sc in next 2 sts, 2 sc in next st; rep from * 3 more times'); ok(e.count.made === 16 && e.count.exact, 'rep from * 3 more times = 4 passes: ' + JSON.stringify(e.count)); }
+  { const e = E('*sc in next st, sc in next 2 sts; rep from * 3 times'); ok(e.count.made === 12 && e.count.alt && e.count.alt.made === 9, 'rep from * N times: both readings shown: ' + JSON.stringify(e.count)); }
+  { const e = E('(sc, ch 1) x 3 in next sp'); ok(e.count.made === 3 && e.count.chains === 3 && /all worked into the same place/.test(e.text), '( ) x N in a place'); }
+  { const e = E('(sc, ch 1) 3 times'); ok(e.count.made === 3 && e.count.chains === 3 && e.parts[0].node === 'rep', '( ) N times'); }
+  { const e = E('[3 dc, ch 2] x 4'); ok(e.count.made === 12, '[ ] reads like ( ): ' + JSON.stringify(e.count)); }
+  { const e = E('Ch 3 (counts as dc), dc in next 4 sts'); ok(/stands in for a stitch/.test(e.text) && e.count.made === 5 && ids(e).includes('tch'), 'turning chain counts as: made 5'); }
+  { const e = E('Ch 3 (does not count as a stitch), dc in next 4 sts'); ok(e.count.made === 4 && /does not count/.test(e.text), 'turning chain does not count'); }
+  { const e = E('Row 2: Ch 3, turn, dc in next 4 sts'); ok(e.warnings.some(w => /does not say whether it counts/.test(w)), 'turning ch with no "counts as": both readings are offered'); }
+  { const e = E('sc in next ch-1, ch 1'); ok(e.parts[0].hook.includes('ch-1 space') && /not into one of its chain stitches/.test(e.parts[0].hook), 'ch-space: hook in the gap, not the chain: ' + e.parts[0].hook); }
+  { const e = E('dc in next ch-3 sp'); ok(/ch-3 space/.test(e.parts[0].hook) && ids(e).includes('chsp'), 'ch-3 sp'); }
+  { const e = E('(3 dc, ch 3, 3 dc) in next ch-3 sp'); ok(e.parts[0].node === 'grp' && e.count.made === 6 && e.count.chains === 3 && /ch-3 space/.test(e.parts[0].hook) && e.parts[0].items.every(p => p.hook === null), 'shell in a space: one group, one hook place'); }
+  { const e = E('work 3 dc, ch 3 and 3 dc in next ch 3 sp'); ok(e.parts[0].node === 'grp' && e.parts[0].folded && e.warnings.some(w => /read as one shell/.test(w)), 'a shell written without brackets is read as one group, with a warning'); }
+  ok(/fan of several stitches/.test(E('shell').text), 'shell term');
+  { const e = E('Skip first 3-dc shell; (3 dc, ch 3, 3 dc) in next ch-3 sp; skip next shell'); ok(e.parts.filter(p => p.node === 'skip').length === 2 && /skip the next shell/.test(e.text), 'skip a shell'); }
+  { const e = E('((3 dc, ch 2, 3 dc) in next corner sp, ch 1) x3'); ok(e.count.made === 18 && e.count.chains === 9 && /corner space/.test(e.text), 'granny corners: 3 corners of 6 dc = 18'); }
+  { const e = E('skip 4 sc, (dc, ch 1, dc, ch 1, dc, ch 1, dc) in next st.'); ok(e.parts[0].node === 'skip' && e.parts[1].node === 'grp' && e.count.made === 4 && e.count.chains === 3 && e.count.used === 5, 'skip then a bracketed group in one stitch (H-57 area, T1 #25): ' + JSON.stringify(e.count)); }
+  { const e = E('dc in same st, dc in same sp'); ok(/same stitch/.test(e.hooks[0]) && /same space/.test(e.hooks[1]) && ids(e).includes('same'), 'in same st / sp'); }
+  { const e = E('Sc in 2nd ch from hook, sc in each ch across'); ok(/2nd chain from the hook/.test(e.text) && /loop on the hook is not counted/.test(e.text), 'Nth ch from hook'); }
+  { const e = E('Row 2: sc in first sc, sc in each st across, sc in top of turning ch'); ok(e.hooks.some(h => /top of the turning or beginning chain/.test(h)), 'top of turning ch is a target'); }
+  { const e = E('Ch 1, turn, sc in each st across'); ok(e.flat === true && e.warnings.some(w => /flat piece/.test(w)), 'turn: flat, never a ring'); }
+  { const e = E('(sc2tog) x 3'); ok(e.count.made === 3 && e.count.used === 6 && /together/.test(e.text), 'sc2tog'); }
+  { const e = E('6 sc in magic ring'); ok(e.count.made === 6 && /centre ring/.test(e.text) && !e.flat, 'ring: not flat'); }
+  // US and UK
+  ok(/UK pattern dc is the US sc/.test(E('dc in next st').uk.join()), 'UK note where dc / sc collide');
+  { const e = E('htr in next st'); ok(e.warnings.some(w => /UK term/.test(w)), 'a UK-only term is flagged loudly'); }
+  // unsure: a person, with what was understood
+  { const e = E('sc in next st, blorp in next 3 sts, dc in next st'); ok(e.needsHuman && e.unrecognised.includes('blorp') && e.understood.includes('sc') && /sc|single crochet/.test(e.text) && /Not recognised/.test(e.text), 'an unknown word: needs a human, with what was understood'); }
+  ok(E('').needsHuman && E('   ').kind === 'empty', 'empty input');
+  { const e = E('Joining Round: (right side) Work in dc across back, work'); ok(e.needsHuman && e.warnings.some(w => /cut off/.test(w)) && ids(e).includes('join'), 'a cut-off line is flagged, not guessed'); }
+  { const e = E('Row 2: Ch 3 (counts as dc), in the ch-3 space of previous row, work (3 dc, ch 3, 3 dc) dc in last st (turning ch-3 of previous row), turn.\nRepeat Row 2 for a total of 50 shells.'); ok(e.count.total && e.count.total.n === 50 && /total of 50 shells/.test(e.text) && e.hooks.some(h => /turning or beginning chain/.test(h)) && e.flat, 'shell row (T1 #14): ch 3 counts, shell in the ch-3 space, last dc in the turning chain, flat, 50 shells'); }
+  // printed counts: agree, disagree, or agree only under another way of counting
+  { const e = E('Round 1: (3 dc, ch 2) x3 in ring (12)'); ok(e.count.made === 9 && e.count.agrees === true && e.warnings.some(w => /each chain space is counted as one/.test(w)), 'H-57 (1): (3 dc, ch 2) x3 in ring (12): 12 only if each ch-space counts; says so: ' + e.warnings); }
+  { const e = E('Round 1: (3 dc, ch 2) x3 in ring (13)'); ok(e.count.agrees === false && e.warnings.some(w => /disagree/.test(w)), 'a printed count that does not work out is a warning'); }
+  { const e = E('Round 2: ((3 dc, ch 2, 3 dc) in next corner sp, ch 1) x3 (18)'); ok(e.count.made === 18 && e.count.agrees === true && !e.warnings.some(w => /disagree|matches only/.test(w)), 'H-57 (2): 18 dc, count matches'); }
+  // the reader bug behind H-57: "ch N" used to swallow the group's closing bracket and lose "x3"
+  { const o = C.parsePattern('Round 1: (3 dc, ch 2) x3 in ring'); ok(o.rounds[0].mr === 9, 'readOps: (3 dc, ch 2) x3 = 9 dc, not 3: ' + o.rounds[0].mr); }
+  { const g = C.readPattern('Round 2: ((3 dc, ch 2, 3 dc) in next corner sp, ch 1) x3 (18)'); ok(g.kind === 'granny' && !g.warns.length && g.rounds[0].acts.filter(a => a.a === 'st').length === 18, 'granny reader: H-57 wording (2) reads 18 dc, no warning: ' + g.warns); }
+  // H-64: the check before steps are shown
+  { const c = K('Round 1: 6 sc in magic ring (6)\nRound 2: 2 sc in each st around (12)\nRound 3: *sc, 2 sc in next st; rep from * around (18)'); ok(c.verdict === 'ok' && c.show && c.kind === 'rounds', 'a clean rounds pattern: ok'); }
+  { const c = K('Row 2: Skip first 3-dc shell; work 3 dc, ch 3 and 3 dc in next ch 3 sp between shells; skip next 3-dc shell; dc in sp between last dc of shell and next ch-3 turning ch. Ch 3, turn.'); ok(c.verdict === 'needs-human' && c.findings.some(f => /flat piece/.test(f.msg)), 'T1 #17: a shell row read as a ring is now loud (row + turn means flat): ' + c.findings.map(f => f.msg.slice(0, 60))); }
+  { const c = K('Row 2: Ch 3, (counts as dc), 2 dc in next st, turn.\nRow 3: Ch 3, dc in each st across, turn.'); ok(c.verdict === 'needs-human' && c.kind === 'rounds', 'row + turn, no ring: not trusted as rounds'); }
+  { const c = K('Round 1: 6 sc in magic ring\nRound 2: (sc, ch 1, sc) in next st, sc in each st around'); ok(c.verdict === 'needs-human', 'bracketed group into one stitch, read by the round reader: needs a human: ' + c.verdict + ' ' + c.kind); }
+  { const c = K('Round 2: ch 3 (counts as 1 dc now and throughout), 2 dc in loop, ch 2, (3 dc in loop, ch 2) 3 times, sl st in top of beginning ch-3: 12 dc'); ok(c.verdict === 'needs-human' && c.findings.some(f => /between stitches/.test(f.msg)), 'T1 #11: a granny round read as plain dc in a ring is now loud'); }
+  { const c = K('Round 1: (3 dc, ch 2) x3 in ring (12)'); ok(c.verdict === 'warn' && c.findings.some(f => /stated \[12\]/.test(f.msg)) && c.findings.some(f => /matches only/.test(f.msg)), 'H-57 (1) through the check: warns with both numbers: ' + c.findings.map(f => f.msg.slice(0, 50))); }
+  { const c = K('Round 2: ((3 dc, ch 2, 3 dc) in next corner sp, ch 1) x3 (18)'); ok(c.verdict === 'ok' && c.kind === 'granny', 'H-57 (2) through the check: reads 18, ok'); }
+  { const c = K('Round 1: 6 sc in magic ring (6)\nRound 2: 2 sc in each st around (14)'); ok(c.verdict === 'warn' && c.findings.some(f => /stated \[14\]/.test(f.msg)), 'a printed count that disagrees with what was read: warn'); }
+  { const c = K('Ch 20\nRow 1: Sc in 2nd ch from hook, sc in each ch across, turn. (19)\nRow 2: Ch 1, blorp in each st across, turn. (19)'); ok(c.verdict === 'needs-human', 'a line the reader cannot read: needs a human'); }
+  { const c = K('Ch 16\nRow 1: Sc in 2nd ch from hook and in each ch across, turn. (15)\nRow 2: Ch 1, sc in each st across, turn. (15)'); ok(c.verdict === 'ok' && c.kind === 'rows', 'a clean rows pattern: ok'); }
+  { const c = K('Row 1: Ch 20, *skip 1, sc in next 3, ch 1; rep from * to end, end with a flurb'); ok(c.verdict !== 'ok', 'words the reader ignores are never a silent ok'); }
+  const fixtures = fs.existsSync(process.env.PICOTLAB_FIXTURES || path.join(__dirname, 'fixtures/patterns')) ? (process.env.PICOTLAB_FIXTURES || path.join(__dirname, 'fixtures/patterns')) : null;
+  if (fixtures) { let bad = 0; for (const f of fs.readdirSync(fixtures).filter(x => /^\d\d-.*\.txt$/.test(x))) { const t = fs.readFileSync(path.join(fixtures, f), 'utf8').split('\n').slice(1).filter(l => l.trim() && !l.startsWith('#') && !/^https?:/.test(l.trim())).join('\n'); if (K(t).verdict === 'needs-human') bad++; } ok(bad === 0, 'the 14 real fixtures: no false "needs a human" (' + bad + ')'); }
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
