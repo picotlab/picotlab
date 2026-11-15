@@ -1,30 +1,41 @@
 # Picotlab
 
-**A free, open-source crochet companion.** Paste a crochet pattern and Picotlab walks you
-through it stitch by stitch, in plain words, with an animated hook. It checks every round's stitch
-count and shows any line it can't read as "needs a human" rather than guessing. Today it reads
-patterns worked in rounds (hats, amigurumi); rows and granny squares come next. Describe a piece
-("slouchy beanie for a 58 cm head in worsted, ribbed brim") and it works out a true-size pattern
-from your gauge, checks it on a simulated stitch fabric, shows it on a head, neck or bed, and writes
-a printable pattern sheet. No AI is needed for any of it: the pattern maths is plain, tested code.
+**A free, open-source crochet companion that explains the line you're stuck on.**
 
-> Status: early prototype (a single-page app). The pattern maths is tested; real-yarn fit is still
-> being checked against hooked swatches. Expect changes.
+## Explain a line
 
-## What it does today
+Paste the one line of a pattern that has you stuck. Picotlab gives it back in plain steps, tells you
+where the hook goes, and checks the stitch count against the one printed in the pattern.
 
-- **Plain-language requests → pattern spec**: item, size, yarn weight, hook, gauge, stitch, brim,
-  stripes. US terms (UK on request), cm or inches.
-- **True-size design** for hats (beanie, slouch, beret, bucket), scarves and cowls, blankets (rows or
-  granny squares) and amigurumi. Counts are searched per round to hit the target size with even,
-  crochetable increases.
-- **3D fabric preview**: the piece is rebuilt stitch by stitch as a spring network and shown on a
-  head form, a neck or a bed. Ruffles and puckers come from the simulation, not from drawing.
-- **Hook walkthrough**: play, pause and scrub through every stitch in order ("R3, st 4 of 18: inc").
-- **Fit check, colourwork with yardage per colour, pattern sheet, photo → shape, swatch calibration.**
-- **Blender export** (OBJ or a bpy script) and a CPU-safe headless render script.
+For example, paste:
 
-Everything above runs in your browser. No account, no server, no AI calls.
+```
+Rnd 4: (sc in next 2 sts, inc) x6 (24)
+```
+
+and you get the steps in order, where the hook goes for each one, and a check that the round really
+ends on 24.
+
+## Check a whole pattern
+
+Paste a pattern worked in rounds, rows or granny squares and Picotlab checks it first. Each
+round's stitch count is added up against the printed count. A line it can't read is shown as
+"needs a human", and a doubtful reading is never shown as steps. Then you can step through it
+stitch by stitch.
+
+Everything runs in your browser. No AI is needed, no account, no server.
+
+> Status: early prototype (a single-page app). Expect changes. Please paste only your own text, or a
+> line short enough to quote, not a whole copyrighted pattern.
+
+## And the older features, below the explainer
+
+- **Design**: describe a piece and get a true-size pattern from your gauge, for hats, scarves,
+  cowls, blankets and amigurumi.
+- **3D preview**: the piece shown on a simulated stitch fabric, on a head, neck or bed.
+- **Walkthrough**: an animated hook, stitch by stitch.
+- **Swatch calibration** (measure your swatch so sizes follow your hands) and a **printable pattern sheet**.
+- Works at phone width, in light and dark themes.
 
 ## Try it
 
@@ -52,22 +63,13 @@ The Blender bridge works with these MIT-licensed projects, which are not include
 [mcp-for-blender](https://github.com/ahujasid/mcp-for-blender) and [blender-claude-skill](https://github.com/MartinRapcan/blender-claude-skill). See
 `blender/SETUP.md`.
 
-## Roadmap (short)
-
-1. Repository, CI, phone and dark-mode pass, real swatch checks.
-2. `@picotlab/core` as a TypeScript npm package with full tests and an open pattern file format.
-3. A real web app (offline-capable, row counter, print/PDF).
-4. Optional AI help (free-text requests, photo of a finished piece, pattern tech-edit), always
-   checked by the same maths, with a bring-your-own-key option.
-5. v1.0, then community features for clubs, teachers and designers.
-
-Details: `ARCHITECTURE.md`.
+More on where it is going: `ARCHITECTURE.md`.
 
 ## Contributing
 
-Issues and pull requests are welcome once the repository is public. Crocheters are especially
-welcome: a measured swatch or a hooked test piece is worth more than code. Please include your yarn,
-hook, gauge and measurements.
+Issues and pull requests are welcome. Crocheters are especially welcome: a measured swatch or a
+hooked test piece is worth more than code. Please include your yarn, hook, gauge and measurements.
+Just want to try it? See [TESTING.md](TESTING.md) for how to tell us how it went.
 
 ## Licence
 
