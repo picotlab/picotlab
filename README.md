@@ -1,8 +1,9 @@
 # Picotlab
 
-**A free, open-source crochet companion.** Picotlab explains patterns stitch by stitch, in plain
-words, with an animated hook walkthrough. Today that works for the patterns it writes itself, and
-reading any pasted pattern is the next big step. Describe a piece
+**A free, open-source crochet companion.** Paste a crochet pattern and Picotlab walks you
+through it stitch by stitch, in plain words, with an animated hook. It checks every round's stitch
+count and shows any line it can't read as "needs a human" rather than guessing. Today it reads
+patterns worked in rounds (hats, amigurumi); rows and granny squares come next. Describe a piece
 ("slouchy beanie for a 58 cm head in worsted, ribbed brim") and it works out a true-size pattern
 from your gauge, checks it on a simulated stitch fabric, shows it on a head, neck or bed, and writes
 a printable pattern sheet. No AI is needed for any of it: the pattern maths is plain, tested code.
