@@ -10,11 +10,11 @@ where the hook goes, and checks the stitch count against the one printed in the 
 For example, paste:
 
 ```
-Rnd 5: *sc in next 3 sts, 2 sc in next st* around (30)
+Rnd 4: (sc in next 2 sts, inc) x6 (24)
 ```
 
 and you get the steps in order, where the hook goes for each one, and a check that the round really
-ends on 30.
+ends on 24.
 
 ## Check a whole pattern
 

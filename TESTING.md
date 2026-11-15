@@ -1,6 +1,6 @@
 # Help test it
 
-Picotlab is an early prototype, and we want to know how it works for real crocheters.
+Picotlab is early. Your honest report helps most.
 
 1. Open `index.html` in a browser (or the hosted copy, if you were given one).
 2. Paste the line you're stuck on, or a whole pattern, into "Explain a line".
