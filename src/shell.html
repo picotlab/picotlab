@@ -1,0 +1,317 @@
+<title>Picotlab Crochet Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Workbench: prompt + spec | cutting-mat viewport at true size | finished piece + pattern. One column on phones. */
+:root{
+  --bg:#e7ecef; --panel:#fbfcfd; --ink:#16212b; --muted:#5a6876; --line:#d3dbe1; --chip:#eef2f5;
+  --accent:#f2c53d; --accent-ink:#221c05;
+  --target:#c8452f; --fit:#2a63b8; --good:#22754a; --warn:#8a5a0f; --bad:#b8352a;
+  --pill-fit:#2a5aa8; --pill-good:#1f6b44; --pill-warn:#7f520c; --pill-muted:#4f5c69;
+  --mat:#2b5a4b; --mat-line:rgba(255,255,255,.065); --mat-major:rgba(255,255,255,.12); --mat-tick:#f2d35b; --mat-ink:#eaf3ee;
+  --display:'Bricolage Grotesque','Avenir Next',system-ui,sans-serif; --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --panel:#172027; --ink:#e3eaef; --muted:#93a3b0; --line:#28343d; --chip:#1f2a32;
+  --target:#ff7a5e; --fit:#7fb0ff; --good:#5cc98a; --warn:#e0a84a; --bad:#ff6b5b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --panel:#172027; --ink:#e3eaef; --muted:#93a3b0; --line:#28343d; --chip:#1f2a32;
+  --target:#ff7a5e; --fit:#7fb0ff; --good:#5cc98a; --warn:#e0a84a; --bad:#ff6b5b; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45;margin:0}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-columns:310px minmax(0,1fr) 370px;grid-template-rows:auto minmax(0,1fr);gap:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:-.01em;margin:0}
+h1 span{color:var(--muted);font-weight:500}
+.tag{color:var(--muted);font-size:13px;min-width:0}
+h2{font-family:var(--display);font-size:15px;font-weight:700;margin:0}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:16px;overflow:auto;min-height:0;min-width:0}
+.sec{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.val{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button.btn{font:600 13px var(--body);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;flex:1}
+button.primary.running{background:var(--ink);color:var(--panel)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--fit);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 12px var(--body);padding:5px 9px;border-radius:99px;border:1px solid var(--line);background:var(--chip);color:var(--ink);cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.fields label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);font-weight:600;min-width:0}
+.fields label.wide{grid-column:1/-1}
+.fields label.chk{flex-direction:row;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);font-weight:500}
+.fields select,.fields input[type=number]{font:13px var(--body);color:var(--ink);background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:6px 7px;width:100%;min-width:0}
+.fields .from{color:var(--fit)}
+input[type=range]{width:100%;accent-color:var(--ink)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.stat .n{font-family:var(--mono);font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat .k{font-size:11px;color:var(--muted)}
+.pill{display:inline-block;color:#fff!important;font:600 11px var(--body);padding:2px 8px;border-radius:99px;color:#fff}
+.note{font-size:12px;color:var(--muted)}
+.tone-good{color:var(--good)}.tone-warn{color:var(--warn)}.tone-bad{color:var(--bad)}
+.mat{position:relative;border-radius:10px;overflow:hidden;min-height:0;min-width:0;background-color:var(--mat);
+  background-image:linear-gradient(var(--mat-major) 1px,transparent 1px),linear-gradient(90deg,var(--mat-major) 1px,transparent 1px),linear-gradient(var(--mat-line) 1px,transparent 1px),linear-gradient(90deg,var(--mat-line) 1px,transparent 1px);
+  background-size:120px 120px,120px 120px,24px 24px,24px 24px}
+.mat canvas.three{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.ruler{position:absolute;left:0;right:0;top:0;height:14px;pointer-events:none;
+  background-image:linear-gradient(90deg,var(--mat-tick) 1px,transparent 1px),linear-gradient(90deg,var(--mat-tick) 1px,transparent 1px);
+  background-size:120px 14px,24px 6px;background-repeat:repeat-x;opacity:.7}
+.hud{position:absolute;left:12px;right:12px;bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;pointer-events:none}
+.hud>*{pointer-events:auto}
+.hudgroup{display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(10,25,20,.62);backdrop-filter:blur(6px);padding:6px 8px;border-radius:9px;color:var(--mat-ink);font-size:12px}
+.hudgroup button{font:600 12px var(--body);color:var(--mat-ink);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:5px 9px;cursor:pointer}
+.hudgroup button[aria-pressed="true"]{background:var(--mat-tick);color:#1d1a05;border-color:transparent}
+.sw{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px var(--mat-tick)}
+.topinfo{position:absolute;left:12px;top:22px;color:var(--mat-ink);font-family:var(--mono);font-size:12px;line-height:1.6;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.45)}
+.topinfo b{color:var(--mat-tick);font-weight:500}
+.scalebar{position:absolute;right:14px;top:24px;color:var(--mat-ink);font:500 11px var(--mono);text-align:right;pointer-events:none}
+.scalebar i{display:block;height:6px;border:2px solid var(--mat-tick);border-top:0;margin-top:3px;margin-left:auto}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;color:var(--mat-ink);padding:24px;text-align:center}
+#closeup{position:absolute;right:12px;top:58px;width:min(300px,44%);aspect-ratio:4/3;border-radius:9px;background:rgba(10,25,20,.74);backdrop-filter:blur(6px);overflow:hidden}
+#closeup canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#closeCap{position:absolute;left:0;right:0;bottom:0;padding:18px 10px 7px;background:linear-gradient(rgba(8,18,14,0),rgba(8,18,14,.88) 38%);font:600 12px/1.35 var(--body);color:var(--mat-ink);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+#closeCap small{display:block;font-weight:400;font-size:10.5px;opacity:.75}
+.walknow{font:600 14px/1.4 var(--body);background:var(--chip);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:8px 10px;min-height:42px}
+#walkLines{font:12px/1.6 var(--mono);max-height:230px;overflow:auto;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:6px 8px;white-space:pre-wrap;position:relative}
+#walkLines div{padding:0 4px;border-radius:4px}
+#walkLines .cur{background:var(--accent);color:var(--accent-ink)}
+#pasteBox{min-height:96px;font:12.5px/1.5 var(--mono)}
+.walknow.human{border-left-color:var(--bad)}
+.gate{display:inline-block;font:600 11px/1.5 var(--body);padding:0 7px;border-radius:99px;margin-left:6px;border:1px solid currentColor;white-space:nowrap}
+.g-ok{color:var(--good)}.g-bad{color:var(--bad)}.g-none{color:var(--muted)}.g-human{background:var(--bad);border-color:var(--bad);color:#fff}
+#walkLines .cur .gate{color:var(--accent-ink);border-color:var(--accent-ink)}
+#walkLines .cur .g-human{background:var(--accent-ink);color:var(--accent)}
+.fit{width:100%;border-collapse:collapse;font-size:12.5px}
+.fit td{padding:4px 6px;border-top:1px solid var(--line)}
+.fit tr{cursor:pointer}
+.fit tr:hover td{background:var(--chip)}
+.fit tr.on td{background:var(--chip);font-weight:600}
+.fit .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.fit .num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font:600 12px var(--body);padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--chip);color:var(--ink);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.sheetwrap{position:fixed;inset:0;z-index:20;background:rgba(10,20,25,.55);overflow:auto;padding:24px max(16px,env(safe-area-inset-left,0px))}
+.paper{max-width:780px;margin:0 auto;background:var(--panel);color:var(--ink);border-radius:12px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.shbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px}
+.paper h1{font-size:30px;margin:0 0 2px}.paper h3{font-family:var(--display);font-size:16px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--accent)}
+.paper .sub{color:var(--muted);margin:0 0 14px}
+.glance{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;background:var(--chip);border-radius:9px;padding:12px 14px}
+.glance b{display:block;font-family:var(--display);font-size:15px}.glance span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.paper ul{margin:0;padding-left:20px}.paper li{margin:3px 0}
+.abbr{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13px}.abbr b{font-family:var(--mono);font-weight:500}
+.steps{width:100%;border-collapse:collapse;font-size:13.5px}.steps td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:top}
+.steps td:first-child{font-family:var(--mono);font-size:12.5px;white-space:nowrap;color:var(--muted)}.steps td:last-child{font-family:var(--mono);text-align:right;white-space:nowrap}
+.steps tr.note td{color:var(--muted);font-style:italic}
+@media (max-width:600px){
+  .swt .swh{display:none}
+  .swt tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 10px;border-top:1px solid var(--line);padding:8px 0}
+  .swt td{border:0!important;padding:2px 0!important;text-align:left!important;white-space:normal!important}
+  .swt td:first-child,.swt td:nth-child(2){grid-column:1/-1}
+  .swt td:first-child{font:700 14px var(--display);color:var(--ink)}
+  .swt td[data-l]::before{content:attr(data-l);display:block;font:600 11px var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .fit td:nth-child(4){font-size:12px}
+}
+@media (max-width:600px){.paper{padding:18px 16px}.paper h1{font-size:24px}.steps td:first-child{white-space:normal}}
+canvas.chart{width:100%;display:block;border-radius:8px;background:var(--chip)}
+#schem{height:220px}
+#conv{height:56px}
+textarea{width:100%;resize:vertical;font:13px/1.6 var(--mono);color:var(--ink);background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+#pattern{min-height:230px}
+#prompt{min-height:66px;font:14px/1.45 var(--body)}
+.warns{font-size:12px;color:var(--warn);display:flex;flex-direction:column;gap:2px}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.big .n{font-family:var(--display);font-weight:700;font-size:19px;line-height:1.15}
+.big .k{font-size:11px;color:var(--muted)}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
+
+/* Touch and narrow screens: 44 px tap targets, stacked panels, no sideways scroll */
+@media (max-width:1060px), (pointer:coarse){
+  button.btn,.fields select,.fields input[type=number],.fields input[type=text],#phH,.seg button,.chip{min-height:44px}
+  .chip{display:inline-flex;align-items:center}
+  summary{min-height:44px;display:flex;align-items:center}
+  input[type=range]{height:44px}
+  input[type=file]{min-height:44px;max-width:100%}
+  .fields label.chk{min-height:44px}
+  .fields label.chk input,label.chk input{width:24px;height:24px}
+  .fields input[type=color]{min-width:44px!important;min-height:44px!important}
+  .hudgroup button{min-height:44px;min-width:44px}
+  .sw{width:44px;height:44px}
+  .fit tr td{height:44px}
+  #calBody input,#calBody select{min-height:44px}
+  .shbar .btn{min-width:88px}
+}
+@media (max-width:700px){
+  .app{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  header{flex-direction:column;gap:2px}
+  .hud{left:8px;right:8px;bottom:8px;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .hud::-webkit-scrollbar{display:none}
+  .hudgroup{padding:4px;flex-wrap:nowrap;flex:0 0 auto}
+  .mat{height:70vh!important;min-height:420px}
+  #closeup{bottom:68px!important;height:36%!important}
+  .topinfo{top:18px;font-size:11px;line-height:1.5;max-width:calc(100% - 130px)}
+  .scalebar{top:20px}
+  .sheetwrap{padding:8px}
+  .paper{padding:16px 14px}
+  .steps{font-size:12.5px}
+  .steps td{padding:5px 3px}
+  .big{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+@media (max-width:700px){
+  #closeup{left:12px;right:12px;top:auto;bottom:124px;width:auto;aspect-ratio:auto;height:40%}
+  .topinfo{font-size:11px}
+}
+@media (max-width:1060px){
+  html,body{height:auto}
+  .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+  .mat{height:64vh;min-height:380px;order:2} header{order:0} #left{order:1} #right{order:3}
+  .panel{overflow:visible}
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Picotlab <span>crochet lab</span></h1>
+    <div class="tag">Describe a hat, scarf, cowl or blanket. Picotlab reads it into a spec, sizes it from your gauge, searches thousands of stitch counts for the best pattern and hooks it at true size.</div>
+  </header>
+
+  <aside class="panel" id="left">
+    <div class="sec">
+      <label class="lbl" for="prompt">Describe what to make</label>
+      <textarea id="prompt" spellcheck="false"></textarea>
+      <div class="btns"><button class="btn primary" id="design">Design it</button></div>
+      <div class="note" id="parsed" aria-live="polite"></div>
+      <div class="lbl">Try one</div>
+      <div class="chips" id="examples"></div>
+    </div>
+    <div class="sec" id="pasteSec">
+      <label class="lbl" for="pasteBox">Or paste a pattern to walk through</label>
+      <textarea id="pasteBox" spellcheck="false" placeholder="R1: 6 sc in a magic ring [6]&#10;R2: inc in each st around [12]&#10;R3: (sc, inc) x6 [18]"></textarea>
+      <div class="btns"><button class="btn primary" id="pasteGo">Read it and walk me through</button></div>
+      <div class="note" id="pasteNote">Patterns worked in rounds. Each round's printed count is checked; lines the reader can't follow become “needs a human” steps.</div>
+    </div>
+    <details id="photoSec">
+      <summary>Or start from a photo</summary>
+      <div class="sec" style="margin-top:8px">
+        <label class="lbl" for="photoFile">Photo of the piece</label>
+        <input type="file" id="photoFile" accept="image/*">
+        <div class="note">Side-on and upright, on a plain background. Works for pieces made in the round: hats, toys, baskets. The piece is read as round in cross-section.</div>
+        <canvas id="photoCv" class="chart" style="height:240px;touch-action:none" hidden aria-label="Photo with detected outline"></canvas>
+        <div class="btns"><button class="btn" id="phAuto" disabled>Auto-detect</button><button class="btn" id="phTrace" disabled>Trace outline</button></div>
+        <div class="row"><label class="lbl" for="phH">Real height (cm)</label><input type="number" id="phH" value="10" min="2" step="0.5" style="width:90px;font:13px var(--body);color:var(--ink);background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:6px 7px"></div>
+        <button class="btn primary" id="phUse" disabled>Fit a pattern to this shape</button>
+        <div class="note" id="phNote"></div>
+      </div>
+    </details>
+    <div class="sec">
+      <div class="row"><h2>Your gauge</h2><button class="btn" id="calBtn" style="padding:6px 12px">Calibrate</button></div>
+      <div class="note" id="calChip"></div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Spec</h2><span class="note"><span class="from">blue</span> = from your words</span></div>
+      <div class="fields" id="fields"></div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Optimizer</h2><span id="fitPill" class="pill" style="background:var(--muted)">idle</span></div>
+      <div class="btns"><button class="btn primary" id="go">Search</button><button class="btn" id="reseed">Restart</button></div>
+      <div id="lamRow"><div class="row"><label class="lbl" for="lam">Priority</label><span class="val" id="lamV"></span></div>
+        <input type="range" id="lam" min="0" max="100" value="35"><div class="row note"><span>Exact size</span><span>Easy to hook</span></div></div>
+      <div class="stats">
+        <div class="stat"><div class="n" id="sEvals">0</div><div class="k">patterns tested</div></div>
+        <div class="stat"><div class="n" id="sRate">0</div><div class="k">patterns / second</div></div>
+        <div class="stat"><div class="n" id="sErr">–</div><div class="k" id="sErrK">size miss</div></div>
+        <div class="stat"><div class="n" id="sGen">0</div><div class="k">generation</div></div>
+      </div>
+      <canvas class="chart" id="conv"></canvas>
+    </div>
+    <details>
+      <summary>How it works</summary>
+      <p>Your words become a spec: item, size, yarn weight, hook, gauge, stitch and features. Gauge sets the real size of one stitch (about 14 sc per 10 cm in worsted on a 5 mm hook); a different hook scales it, and a gauge you type overrides it. hdc is about 1.6 sc tall and dc about 2.3, which is how real fabric measures.</p>
+      <p>Hats are worked top-down in joined rounds. The target is the hat's true shape in centimetres: a flat crown circle (growing about 6 sts a round in sc, 8 in hdc, 12 in dc) out to the head circumference less the ease, then worked even, with FPdc/BPdc ribbing at the brim. A genetic search tries round-by-round stitch counts, scores them on size, flatness (no ruffles or cupping) and how easy the increases are, and keeps the best. Scarves, cowls and blankets search stitch and row counts, stripe repeats and granny-square grids that land on the size.</p>
+      <p>The winner is simulated at true size: hats stitch by stitch as a spring network that stretches over a head form; flat pieces as cloth draped over a rod, a box or shoulders. Yarn is estimated from the stitches (calibrated so an adult worsted beanie uses about 110–180 m) plus 10% for ends.</p>
+    </details>
+  </aside>
+
+  <main class="mat" id="mat">
+    <div class="ruler"></div>
+    <canvas class="three" id="three"></canvas>
+    <div class="topinfo" id="topinfo"></div>
+    <div class="scalebar" id="scalebar"><span id="scaleLbl">10 cm</span><i id="scaleBar" style="width:80px"></i></div>
+    <div id="closeup" hidden><canvas id="closeCv"></canvas><div id="closeCap"></div></div>
+    <div class="hud">
+      <div class="hudgroup">
+        <button id="form" aria-pressed="true">Form</button>
+        <button id="skin" aria-pressed="true">Fabric</button>
+        <button id="relax">Re-drape</button>
+        <button id="walk" aria-pressed="false">Walkthrough</button>
+        <button id="stretch" aria-pressed="false">Stretch map</button>
+      </div>
+      <div class="hudgroup" id="yarns" aria-label="Yarn colour"></div>
+    </div>
+  </main>
+
+  <aside class="panel" id="right">
+    <div class="sec" id="walkSec" hidden>
+      <div class="row"><h2>Walkthrough</h2><span class="note" id="walkPos"></span></div>
+      <div class="walknow" id="walkNow" aria-live="polite"></div>
+      <div class="btns"><button class="btn" id="wBack" aria-label="Step back">◀ Step</button><button class="btn primary" id="wPlay">Play</button><button class="btn" id="wFwd" aria-label="Step forward">Step ▶</button></div>
+      <div class="row"><label class="lbl" for="wScrub">Position</label><span class="val" id="wScrubV"></span></div>
+      <input type="range" id="wScrub" min="0" max="1" value="0">
+      <div class="row"><label class="lbl" for="wSpeed">Speed</label><span class="val" id="wSpeedV"></span></div>
+      <input type="range" id="wSpeed" min="0" max="100" value="10">
+      <div id="walkLines"></div>
+      <div class="note">The hook and yarn motions are a simplified teaching animation, not a physics-accurate yarn simulation. Close-ups play for every stitch at slow speeds, for the first of each kind at medium speeds, and are skipped at high speed so the piece just grows.</div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2 id="pieceTitle">Finished piece</h2><span class="note" id="pieceSub"></span></div>
+      <div class="big">
+        <div><div class="n" id="bSize">–</div><div class="k">finished size</div></div>
+        <div><div class="n" id="bYarn">–</div><div class="k" id="bYarnK">yarn</div></div>
+        <div><div class="n" id="bTime">–</div><div class="k">time to make (steady pace)</div></div>
+        <div><div class="n" id="bSt">–</div><div class="k">stitches</div></div>
+      </div>
+      <canvas class="chart" id="schem"></canvas>
+    </div>
+    <div class="sec" id="fitSec" hidden>
+      <div class="row"><h2>Fit check</h2><span class="note" id="fitNote"></span></div>
+      <div id="fitBody"></div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Pattern</h2><span class="note" id="patNote"></span></div>
+      <textarea id="pattern" spellcheck="false" aria-label="Crochet pattern"></textarea>
+      <div class="warns" id="warns"></div>
+      <div class="btns"><button class="btn primary" id="sim">Hook my edits</button><button class="btn" id="copy">Copy</button><button class="btn" id="sheetBtn">Pattern sheet</button></div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Blender export</h2><span class="note">real size, metres</span></div>
+      <div class="btns"><button class="btn" id="xpy">Copy Blender script</button><button class="btn" id="xobj">Copy OBJ</button></div>
+      <div class="note">Exports the piece as it hangs now. Script: in Blender open Scripting, press New, paste, Run Script; it builds the mesh at true size with a yarn material, a Solidify the thickness of the yarn and a subdivision modifier. OBJ: save the text as picotlab.obj and use File › Import › Wavefront.</div>
+      <textarea id="exportBox" readonly hidden aria-label="Export text" style="min-height:120px"></textarea>
+    </div>
+  </aside>
+</div>
+
+<div id="sheet" class="sheetwrap" hidden role="dialog" aria-modal="true" aria-labelledby="shTitle">
+  <div class="paper">
+    <div class="shbar"><button class="btn primary" id="shCopy">Copy as text</button><button class="btn" id="shClose">Close</button></div>
+    <div id="shBody"></div>
+  </div>
+</div>
+<div id="cal" class="sheetwrap" hidden role="dialog" aria-modal="true" aria-labelledby="calTitle">
+  <div class="paper">
+    <div class="shbar"><button class="btn" id="calClose">Close</button></div>
+    <div id="calBody"></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>

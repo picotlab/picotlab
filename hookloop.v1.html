@@ -1,0 +1,825 @@
+<title>Hookloop Crochet Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a three-column workbench. Controls | cutting-mat viewport | pattern sheet. Stacks to one column on phones. */
+:root{
+  --bg:#e7ecef; --panel:#fbfcfd; --ink:#16212b; --muted:#5a6876; --line:#d3dbe1; --chip:#eef2f5;
+  --accent:#f2c53d; --accent-ink:#221c05;
+  --target:#c8452f; --fit:#2a63b8; --good:#2f8a57; --warn:#b7791f; --bad:#c0392b;
+  --mat:#2b5a4b; --mat-line:rgba(255,255,255,.065); --mat-major:rgba(255,255,255,.12); --mat-tick:#f2d35b; --mat-ink:#eaf3ee;
+  --display:'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --body:'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --panel:#172027; --ink:#e3eaef; --muted:#93a3b0; --line:#28343d; --chip:#1f2a32;
+  --accent:#f2c53d; --accent-ink:#221c05;
+  --target:#ff7a5e; --fit:#7fb0ff; --good:#5cc98a; --warn:#e0a84a; --bad:#ff6b5b;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --panel:#172027; --ink:#e3eaef; --muted:#93a3b0; --line:#28343d; --chip:#1f2a32;
+  --accent:#f2c53d; --accent-ink:#221c05;
+  --target:#ff7a5e; --fit:#7fb0ff; --good:#5cc98a; --warn:#e0a84a; --bad:#ff6b5b;
+  color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45}
+*{box-sizing:border-box}
+.app{height:100%;display:grid;grid-template-columns:288px minmax(0,1fr) 360px;grid-template-rows:auto minmax(0,1fr);gap:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:-.01em;margin:0}
+h1 span{color:var(--muted);font-weight:500}
+.tag{color:var(--muted);font-size:13px;min-width:0}
+h2{font-family:var(--display);font-size:15px;font-weight:700;margin:0;letter-spacing:.005em}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:16px;overflow:auto;min-height:0;min-width:0}
+.sec{display:flex;flex-direction:column;gap:8px}
+.targets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 5px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--ink);font:500 11px var(--body);cursor:pointer}
+.tbtn canvas{width:40px;height:40px}
+.tbtn[aria-pressed="true"]{border-color:var(--ink);background:var(--panel);box-shadow:inset 0 0 0 1px var(--ink)}
+.tbtn:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--fit);outline-offset:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+input[type=range]{width:100%;accent-color:var(--ink)}
+.val{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button.btn{font:600 13px var(--body);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;flex:1}
+button.primary.running{background:var(--ink);color:var(--panel)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.stat .n{font-family:var(--mono);font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat .k{font-size:11px;color:var(--muted)}
+.pill{display:inline-block;font:600 11px var(--body);padding:2px 8px;border-radius:99px;color:#fff}
+.note{font-size:12px;color:var(--muted)}
+.mat{position:relative;border-radius:10px;overflow:hidden;min-height:0;min-width:0;
+  background-color:var(--mat);
+  background-image:linear-gradient(var(--mat-major) 1px,transparent 1px),linear-gradient(90deg,var(--mat-major) 1px,transparent 1px),linear-gradient(var(--mat-line) 1px,transparent 1px),linear-gradient(90deg,var(--mat-line) 1px,transparent 1px);
+  background-size:120px 120px,120px 120px,24px 24px,24px 24px}
+.mat canvas.three{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.ruler{position:absolute;left:0;right:0;top:0;height:14px;pointer-events:none;
+  background-image:linear-gradient(90deg,var(--mat-tick) 1px,transparent 1px),linear-gradient(90deg,var(--mat-tick) 1px,transparent 1px);
+  background-size:120px 14px,24px 6px;background-repeat:repeat-x;opacity:.7}
+.hud{position:absolute;left:12px;right:12px;bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;pointer-events:none}
+.hud>*{pointer-events:auto}
+.hudgroup{display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(10,25,20,.62);backdrop-filter:blur(6px);padding:6px 8px;border-radius:9px;color:var(--mat-ink);font-size:12px}
+.hudgroup button{font:600 12px var(--body);color:var(--mat-ink);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:5px 9px;cursor:pointer}
+.hudgroup button[aria-pressed="true"]{background:var(--mat-tick);color:#1d1a05;border-color:transparent}
+.sw{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px var(--mat-tick)}
+.topinfo{position:absolute;left:12px;top:22px;color:var(--mat-ink);font-family:var(--mono);font-size:12px;line-height:1.6;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.topinfo b{color:var(--mat-tick);font-weight:500}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;color:var(--mat-ink);padding:24px;text-align:center}
+canvas.chart{width:100%;display:block;border-radius:8px;background:var(--chip)}
+#profile{height:230px;cursor:default}
+#profile.draw{cursor:crosshair}
+#conv{height:70px}
+textarea{width:100%;min-height:220px;resize:vertical;font:13px/1.6 var(--mono);color:var(--ink);background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:10px 12px;tab-size:2}
+.warns{font-size:12px;color:var(--warn);display:flex;flex-direction:column;gap:2px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
+@media (max-width:1000px){
+  html,body{height:auto}
+  .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+  .mat{height:62vh;min-height:360px;order:1} header{order:0} #left{order:2} #right{order:3}
+  .panel{overflow:visible}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Hookloop <span>crochet lab</span></h1>
+    <div class="tag">Pick a shape. The optimizer writes amigurumi patterns, scores them, and hooks the best one in a stitch-level 3D simulation.</div>
+  </header>
+
+  <aside class="panel" id="left">
+    <div class="sec">
+      <div class="lbl">Target shape</div>
+      <div class="targets" id="targets"></div>
+      <div class="note" id="drawHint" hidden>Draw the right half of the silhouette on the profile chart, starting at the magic ring (bottom, on the axis).</div>
+    </div>
+    <div class="sec">
+      <div class="row"><label class="lbl" for="size">Size</label><span class="val" id="sizeV"></span></div>
+      <input type="range" id="size" min="8" max="40" value="18">
+      <div class="row"><label class="lbl" for="lam">Priority</label><span class="val" id="lamV"></span></div>
+      <input type="range" id="lam" min="0" max="100" value="35">
+      <div class="row note"><span>Exact shape</span><span>Easy to hook</span></div>
+    </div>
+    <div class="btns">
+      <button class="btn primary" id="go">Evolve patterns</button>
+      <button class="btn" id="reseed" title="Start a new population">Reseed</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="sEvals">0</div><div class="k">patterns tested</div></div>
+      <div class="stat"><div class="n" id="sRate">0</div><div class="k">patterns / second</div></div>
+      <div class="stat"><div class="n" id="sGen">0</div><div class="k">generation</div></div>
+      <div class="stat"><div class="n" id="sErr">–</div><div class="k">avg miss per round</div></div>
+      <div class="stat"><div class="n" id="sSt">–</div><div class="k">stitches total</div></div>
+      <div class="stat"><div class="n" id="sTime">–</div><div class="k">time to hook (at 20 sc/min)</div></div>
+    </div>
+    <div class="sec">
+      <div class="row"><div class="lbl">Convergence</div><span id="fitPill" class="pill" style="background:var(--muted)">idle</span></div>
+      <canvas class="chart" id="conv"></canvas>
+    </div>
+    <details>
+      <summary>How it works</summary>
+      <p>Each candidate is a list of stitch counts per round. A fast model turns counts into a silhouette: a round of n single crochet has circumference n stitch widths, and consecutive rounds sit one stitch height apart. Rounds that grow faster than one stitch height can absorb would ruffle, so they are penalised.</p>
+      <p>A genetic search mutates counts (add or drop stitches, hold a round, snap to multiples of the ring) and keeps the patterns that match the target with the fewest awkward rounds. The winner is rebuilt stitch by stitch as a spring network (each stitch linked to its neighbours and to the stitch it was worked into) and relaxed with optional stuffing pressure, so ruffles and puckers show up on their own.</p>
+    </details>
+  </aside>
+
+  <main class="mat" id="mat">
+    <div class="ruler"></div>
+    <canvas class="three" id="three"></canvas>
+    <div class="topinfo" id="topinfo"></div>
+    <div class="hud">
+      <div class="hudgroup">
+        <button id="stuff" aria-pressed="true">Stuffed</button>
+        <button id="stripes" aria-pressed="false">Stripes</button>
+        <button id="skin" aria-pressed="true">Fabric</button>
+        <button id="relax">Re-hook</button>
+      </div>
+      <div class="hudgroup" id="yarns" aria-label="Yarn colour"></div>
+    </div>
+  </main>
+
+  <aside class="panel" id="right">
+    <div class="sec">
+      <div class="row"><h2>Profile</h2>
+        <div class="legend"><span><i style="background:var(--target)"></i>target</span><span><i style="background:var(--fit)"></i>pattern</span></div></div>
+      <canvas class="chart" id="profile"></canvas>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Pattern</h2><span class="note">single crochet, worked in joined rounds</span></div>
+      <textarea id="pattern" spellcheck="false" aria-label="Crochet pattern"></textarea>
+      <div class="warns" id="warns"></div>
+      <div class="btns">
+        <button class="btn primary" id="sim">Hook this pattern</button>
+        <button class="btn" id="copy">Copy</button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="row"><h2>Blender export</h2><span class="note">1 stitch = 6 mm</span></div>
+      <div class="btns">
+        <button class="btn" id="xpy">Copy Blender script</button>
+        <button class="btn" id="xobj">Copy OBJ</button>
+      </div>
+      <div class="note">Exports the hooked shape as it is now (relaxed and stuffed). Script: in Blender 2.8 or newer open Scripting, press New, paste, then Run Script. It builds the mesh with a yarn material and a subdivision modifier. OBJ: save the text as hookloop.obj, then File › Import › Wavefront (.obj).</div>
+      <textarea id="exportBox" readonly hidden aria-label="Export text" style="min-height:120px"></textarea>
+      <div class="note">Edit any round and press Hook to test your own idea. Understands MR, sc, inc, dec, sc2tog, invdec, “sc around”, (…) x6, *…* and round ranges like R5–R9.</div>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// CORE-START
+const W = 1, H = 0.9, TAU = Math.PI * 2;
+
+// ---------- target silhouettes: right-half meridians (r, z), z grows away from the magic ring ----------
+function fn(f, n = 180) { const a = []; for (let i = 0; i <= n; i++) a.push(f(i / n)); return a; }
+function densify(poly, n = 60) { const o = []; for (let i = 0; i < poly.length - 1; i++) { const [x0, y0] = poly[i], [x1, y1] = poly[i + 1]; for (let k = 0; k < n; k++) { const t = k / n; o.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]); } } o.push(poly[poly.length - 1]); return o; }
+const TARGETS = {
+  sphere: { label: 'Sphere', closed: true, pts: fn(t => { const a = Math.PI * t; return [Math.sin(a), 1 - Math.cos(a)]; }) },
+  egg: { label: 'Egg', closed: true, pts: fn(t => { const a = Math.PI * t; return [0.78 * Math.sin(a) * (1 + 0.17 * Math.cos(a)), 1.25 * (1 - Math.cos(a))]; }) },
+  teardrop: { label: 'Drop', closed: true, pts: fn(t => { const a = Math.PI * t; return [0.95 * Math.sin(a) * Math.pow(Math.cos(a / 2), 1.3), 1.1 * (1 - Math.cos(a))]; }) },
+  cone: { label: 'Cone', closed: true, flip: true, pts: densify([[0, 0], [0.85, 2.5], [0, 2.5]]) },
+  cylinder: { label: 'Can', closed: true, pts: densify([[0, 0], [0.7, 0], [0.7, 2], [0, 2]]) },
+  vase: { label: 'Vase', closed: false, pts: fn(t => { if (t < 0.22) return [0.55 * t / 0.22, 0]; const u = (t - 0.22) / 0.78; return [0.55 + 0.42 * Math.sin(Math.PI * Math.min(u / 0.78, 1)) + (u > 0.78 ? (u - 0.78) * 1.4 : 0), u * 2.3]; }) },
+  bell: { label: 'Bell', closed: false, flip: true, pts: fn(t => { const a = 0.62 * Math.PI * t; return [Math.sin(a) * (1 + 0.3 * t * t), 1 - Math.cos(a)]; }) },
+  custom: { label: 'Draw', closed: true, pts: fn(t => { const a = Math.PI * t; return [Math.sin(a) * (0.55 + 0.33 * Math.cos(a)), 1.4 * (1 - Math.cos(a))]; }) },
+};
+
+function prepareTarget(T, R) {
+  const p = T.pts, cum = [0];
+  for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
+  const Lt = cum[cum.length - 1] || 1;
+  const k = ((R + (T.closed ? 0.55 : 0)) * H) / Lt;
+  const Rt = new Float64Array(R);
+  let j = 0;
+  for (let i = 0; i < R; i++) {
+    const s = Math.min(Lt, ((i + 1) * H) / k);
+    while (j < cum.length - 2 && cum[j + 1] < s) j++;
+    const seg = cum[j + 1] - cum[j] || 1, u = Math.max(0, Math.min(1, (s - cum[j]) / seg));
+    Rt[i] = k * Math.max(0, p[j][0] + (p[j + 1][0] - p[j][0]) * u);
+  }
+  return { Rt, k, pts: p, closed: T.closed, flip: !!T.flip, R };
+}
+
+// analytic silhouette of a list of round counts
+function profileOf(c) {
+  const n = c.length, r = new Float64Array(n), z = new Float64Array(n);
+  let rp = 0, zp = 0;
+  for (let i = 0; i < n; i++) { const ri = c[i] * W / TAU, dr = ri - rp; z[i] = zp + Math.sqrt(Math.max(0, H * H - dr * dr)); r[i] = ri; rp = ri; zp = z[i]; }
+  return { r, z };
+}
+
+// score: lower is better. Returns parts when asked.
+function evaluate(c, tgt, lambda, parts) {
+  const R = c.length, Rt = tgt.Rt;
+  let err = 0, exc = 0, cx = 0, rp = 0;
+  for (let i = 0; i < R; i++) {
+    const r = c[i] * W / TAU, rt = i < Rt.length ? Rt[i] : 0, d = r - rt;
+    err += d * d;
+    const e = Math.abs(r - rp) - H; if (e > 0) exc += e * e;
+    rp = r;
+    if (i > 0) {
+      const p = c[i - 1], n = c[i];
+      if (n !== p) { cx += 0.35; const k = Math.abs(n - p); if ((n > p ? p : n) % k !== 0) cx += 1; }
+      if (n % c[0] !== 0) cx += 0.25;
+    }
+  }
+  if (c[0] !== 6) cx += 0.5;
+  let close = 0;
+  if (tgt.closed && c[R - 1] > 8) close = (c[R - 1] - 8) * 0.08;
+  const score = err / R + 6 * exc / R + lambda * cx / R + close;
+  if (parts) return { score, rms: Math.sqrt(err / R), exc, cx, close };
+  return score;
+}
+
+function repair(a) {
+  a[0] = Math.max(4, Math.min(9, a[0]));
+  for (let i = 1; i < a.length; i++) {
+    const lo = Math.max(3, Math.ceil(a[i - 1] / 2)), hi = Math.min(300, a[i - 1] * 2);
+    a[i] = Math.max(lo, Math.min(hi, a[i]));
+  }
+  return a;
+}
+
+// ---------- genetic search ----------
+function makeGA(tgt, lambda, P = 96) {
+  const R = tgt.R;
+  const ga = { tgt, lambda, P, R, pop: [], sc: [], gen: 0, evals: 0, best: null, bestScore: Infinity, stall: 0, hist: [] };
+  for (let p = 0; p < P; p++) {
+    const a = new Int16Array(R); a[0] = 6;
+    for (let i = 1; i < R; i++) a[i] = a[i - 1] + ((Math.random() * 13) | 0) - 6;
+    repair(a); ga.pop.push(a); ga.sc.push(evaluate(a, tgt, lambda)); ga.evals++;
+  }
+  return ga;
+}
+function mutate(a) {
+  const R = a.length, i = (Math.random() * R) | 0, op = (Math.random() * 7) | 0;
+  switch (op) {
+    case 0: a[i] += (Math.random() < 0.5 ? -1 : 1) * (1 + ((Math.random() * 2) | 0)); break;
+    case 1: a[i] += (Math.random() < 0.5 ? -1 : 1) * a[0]; break;
+    case 2: if (i > 0) a[i] = a[i - 1]; break;
+    case 3: if (i < R - 1) a[i] = a[i + 1]; break;
+    case 4: { const d = (Math.random() < 0.5 ? -1 : 1) * (1 + ((Math.random() * 3) | 0)); for (let j = i; j < R; j++) a[j] += d; break; }
+    case 5: a[i] = Math.max(a[0], Math.round(a[i] / a[0]) * a[0]); break;
+    case 6: if (i > 0 && i < R - 1) a[i] = Math.round((a[i - 1] + a[i + 1]) / 2); break;
+  }
+}
+function gaStep(ga) {
+  const { P, R, pop, sc } = ga;
+  const idx = [...pop.keys()].sort((x, y) => sc[x] - sc[y]);
+  const tour = () => { let b = (Math.random() * P) | 0; for (let t = 0; t < 2; t++) { const c = (Math.random() * P) | 0; if (sc[c] < sc[b]) b = c; } return pop[b]; };
+  const np = [], ns = [];
+  for (let e = 0; e < 6; e++) { np.push(pop[idx[e]]); ns.push(sc[idx[e]]); }
+  while (np.length < P) {
+    const ch = new Int16Array(tour());
+    if (Math.random() < 0.6) { const B = tour(), cut = 1 + ((Math.random() * (R - 1)) | 0); for (let i = cut; i < R; i++) ch[i] = B[i]; }
+    const m = 1 + ((Math.random() * 3) | 0); for (let k = 0; k < m; k++) mutate(ch);
+    repair(ch); np.push(ch); ns.push(evaluate(ch, ga.tgt, ga.lambda)); ga.evals++;
+  }
+  ga.pop = np; ga.sc = ns; ga.gen++;
+  let bi = 0; for (let i = 1; i < P; i++) if (ns[i] < ns[bi]) bi = i;
+  if (ns[bi] < ga.bestScore - 1e-9) { ga.bestScore = ns[bi]; ga.best = new Int16Array(np[bi]); ga.stall = 0; return true; }
+  ga.stall++; return false;
+}
+
+// ---------- stitch ops: 'S' sc, 'I' inc (2 sc in one), 'D' dec (sc2tog) ----------
+function evenOps(p, n, ri) {
+  if (n === p) return Array(p).fill('S');
+  const grow = n > p, k = Math.abs(n - p), L = grow ? p : n, X = grow ? 'I' : 'D';
+  const ops = Array(L).fill('S'), seg = Math.floor(L / k), shift = ri % 2 ? Math.floor(seg / 2) : 0;
+  for (let j = 0; j < k; j++) ops[(Math.floor(j * L / k) + seg - 1 + shift) % L] = X;
+  return ops;
+}
+function roundsFromCounts(c) { const r = [{ mr: c[0] }]; for (let i = 1; i < c.length; i++) r.push({ ops: evenOps(c[i - 1], c[i], i) }); return r; }
+const consumes = o => (o === 'D' ? 2 : 1), produces = o => (o === 'I' ? 2 : 1);
+function countsFromRounds(rounds) { const c = [rounds[0].mr]; for (let i = 1; i < rounds.length; i++) c.push(rounds[i].ops.reduce((s, o) => s + produces(o), 0)); return c; }
+
+function rle(ops) {
+  const parts = []; let k = 0;
+  while (k < ops.length) { const c = ops[k]; let j = k; while (j < ops.length && ops[j] === c) j++; const n = j - k;
+    if (c === 'S') parts.push(n === 1 ? 'sc' : 'sc ' + n); else { const w = c === 'I' ? 'inc' : 'dec'; parts.push(n === 1 ? w : w + ' x' + n); } k = j; }
+  return parts.join(', ');
+}
+function describe(ops) {
+  const L = ops.length;
+  if (ops.every(o => o === 'S')) return 'sc around';
+  if (ops.every(o => o === ops[0])) return (ops[0] === 'I' ? 'inc' : 'dec') + ' x' + L;
+  for (let q = 1; q < L; q++) {
+    if (L % q) continue;
+    let ok = true; for (let i = 0; i < L && ok; i++) if (ops[i] !== ops[(i + q) % L]) ok = false;
+    if (!ok) continue;
+    const m = L / q; let last = -1; for (let i = 0; i < q; i++) if (ops[i] !== 'S') last = i;
+    const o = (last + 1) % q, unit = ops.slice(o, o + q), u = rle(unit);
+    const grp = n => n === 1 ? u : (unit.length === 1 ? `${u} x${n}` : `(${u}) x${n}`);
+    if (o === 0) return grp(m);
+    return [rle(ops.slice(0, o)), grp(m - 1), rle(ops.slice(o + (m - 1) * q))].filter(Boolean).join(', ');
+  }
+  return rle(ops);
+}
+function formatPattern(rounds) {
+  const lines = [`R1: ${rounds[0].mr} sc in magic ring [${rounds[0].mr}]`];
+  const counts = countsFromRounds(rounds);
+  let i = 1;
+  while (i < rounds.length) {
+    const d = describe(rounds[i].ops); let j = i;
+    while (j + 1 < rounds.length && describe(rounds[j + 1].ops) === d && counts[j + 1] === counts[i] && d === 'sc around') j++;
+    lines.push(`${j > i ? `R${i + 1}–R${j + 1}` : `R${i + 1}`}: ${d} [${counts[i]}]`);
+    i = j + 1;
+  }
+  return lines.join('\n');
+}
+
+// ---------- parser ----------
+function parsePattern(text) {
+  const rounds = [], warns = [];
+  const lines = text.split(/\n/);
+  for (let li = 0; li < lines.length; li++) {
+    let s = lines[li].trim(); if (!s) continue;
+    let a, b, body;
+    const m = s.match(/^(?:r(?:nd|ound)?s?\s*)(\d+)(?:\s*[-–—]\s*(?:r(?:nd|ound)?\s*)?(\d+))?\s*[:.)]?\s*(.*)$/i);
+    if (m) { a = +m[1]; b = m[2] ? +m[2] : a; body = m[3]; }
+    else if (/\b(sc|inc|dec|mr|magic)\b/i.test(s)) { a = b = rounds.length + 1; body = s; }
+    else continue; // notes like "Stuff firmly", "Fasten off"
+    let stated = null;
+    const sm = body.match(/[\[(]\s*(\d+)\s*(?:st|sts|stitches)?\s*[\])]\s*\.?\s*$/i);
+    if (sm) { stated = +sm[1]; body = body.slice(0, sm.index); }
+    if (b < a) b = a;
+    for (let r = a; r <= b; r++) {
+      if (!rounds.length) {
+        const nm = body.match(/(\d+)/); const n = nm ? +nm[1] : 6;
+        if (!/mr|magic|ring|sc/i.test(body)) warns.push(`R${r}: treated as a magic ring of ${n}.`);
+        rounds.push({ mr: Math.max(3, Math.min(20, n)) }); continue;
+      }
+      const prev = countsFromRounds(rounds).pop();
+      const res = parseBody(body, prev);
+      res.warn.forEach(w => warns.push(`R${r}: ${w}`));
+      rounds.push({ ops: res.ops });
+      const got = res.ops.reduce((x, o) => x + produces(o), 0);
+      if (stated != null && stated !== got && r === b) warns.push(`R${r}: stated [${stated}] but the stitches make ${got}.`);
+    }
+  }
+  if (!rounds.length) rounds.push({ mr: 6 });
+  return { rounds, warns };
+}
+function parseBody(body, prev) {
+  const warn = [];
+  let s = ' ' + body.toLowerCase() + ' ';
+  s = s.replace(/[×✕]/g, 'x').replace(/\*([^*]+)\*/g, '($1)').replace(/[\[\]]/g, m => (m === '[' ? '(' : ')'))
+    .replace(/\b(inv(?:isible)?\s*dec|sc\s*2\s*tog|sc2tog)\b/g, 'dec')
+    .replace(/\b2\s*sc\s+in\s+(?:each|every)\s+(?:st|stitch)(?:\s+around)?/g, 'inc around')
+    .replace(/\b2\s*sc\s+in\s+(?:the\s+)?(?:next|same)(?:\s+(?:st|stitch))?/g, 'inc')
+    .replace(/\bsc\s+in\s+(?:the\s+)?next\s+(\d+)\s+(?:sts?|stitches)/g, 'sc $1')
+    .replace(/\bsc\s+in\s+(?:the\s+)?next\s+(?:st|stitch)/g, 'sc')
+    .replace(/\b(?:in\s+)?(?:each|every)\s+(?:st|stitch)(?:\s+around)?/g, ' around')
+    .replace(/(\d)\s*x\b/g, '$1 times');
+  const tok = s.match(/\(|\)|,|x(?=\s*\d)|\d+|[a-z]+/g) || [];
+  const filler = new Set(['in', 'the', 'next', 'and', 'then', 'to', 'end', 'ch', 'sl', 'st', 'sts', 'join', 'turn', 'blo', 'flo', 'bl', 'fl', 'only', 'stitch', 'stitches', 'rep', 'repeat', 'from', 'each', 'of', 'rnd', 'round', 'all', 'times', 'loop', 'back', 'front', 'with', 'color', 'colour']);
+  let i = 0; const unknown = new Set();
+  const isNum = t => t != null && /^\d+$/.test(t);
+  const rep = (ops, n) => { const o = []; for (let k = 0; k < n; k++) o.push(...ops); return o; };
+  function seq() { const out = []; while (i < tok.length && tok[i] !== ')') { if (tok[i] === ',') { i++; continue; } const it = item(); if (it) out.push(...it); } return out; }
+  function item() {
+    const t = tok[i]; let ops = null;
+    const code = w => (w === 'sc' ? 'S' : w === 'inc' ? 'I' : 'D');
+    if (t === '(') { i++; ops = seq(); if (tok[i] === ')') i++; }
+    else if (isNum(t) && ['sc', 'inc', 'dec'].includes(tok[i + 1])) { const n = +t; const w = tok[i + 1]; i += 2; ops = Array(n).fill(code(w)); }
+    else if (t === 'sc' || t === 'inc' || t === 'dec') {
+      i++;
+      if (tok[i] === 'around') { i++; ops = ['A' + code(t)]; }
+      else if (isNum(tok[i]) && tok[i + 1] !== 'times') { ops = Array(+tok[i]).fill(code(t)); i++; }
+      else ops = [code(t)];
+    }
+    else { i++; if (!filler.has(t) && !isNum(t) && t !== ')' && t !== 'around') unknown.add(t); return null; }
+    if (tok[i] === 'x' && isNum(tok[i + 1])) { ops = rep(ops, +tok[i + 1]); i += 2; }
+    else if (isNum(tok[i]) && tok[i + 1] === 'times') { ops = rep(ops, +tok[i]); i += 2; }
+    return ops;
+  }
+  let ops = [];
+  while (i < tok.length) { const part = seq(); ops.push(...part); if (tok[i] === ')') i++; }
+  const fixed = ops.filter(o => o[0] !== 'A').reduce((x, o) => x + consumes(o), 0);
+  let rest = Math.max(0, prev - fixed);
+  const out = [];
+  for (const o of ops) {
+    if (o[0] === 'A') { const c = o[1]; const n = c === 'D' ? Math.floor(rest / 2) : rest; for (let k = 0; k < n; k++) out.push(c); rest -= n * consumes(c); }
+    else out.push(o);
+  }
+  let used = out.reduce((x, o) => x + consumes(o), 0);
+  if (unknown.size) warn.push(`ignored “${[...unknown].join('”, “')}”.`);
+  if (used < prev) { warn.push(`works ${used} of ${prev} stitches; filled the rest with sc.`); while (used < prev) { out.push('S'); used++; } }
+  if (used > prev) {
+    warn.push(`needs ${used} stitches but the round below has ${prev}; trimmed.`);
+    while (used > prev && out.length) used -= consumes(out.pop());
+  }
+  if (!out.length) out.push('S');
+  return { ops: out, warn };
+}
+// CORE-END
+
+// ---------- stitch graph + spring simulation ----------
+function buildSim(rounds, seed) {
+  const counts = countsFromRounds(rounds), prof = profileOf(counts);
+  let N = 1; counts.forEach(c => (N += c));
+  const pos = new Float32Array(N * 3), prv = new Float32Array(N * 3);
+  const roundOf = new Int32Array(N), ringPrev = new Int32Array(N), ringNext = new Int32Array(N), par0 = new Int32Array(N), par1 = new Int32Array(N);
+  const sA = [], sB = [], sR = [], sK = [], tris = [];
+  const spring = (a, b, r, k) => { sA.push(a); sB.push(b); sR.push(r); sK.push(k); };
+  const ang = new Float32Array(N);
+  roundOf[0] = -1; par0[0] = par1[0] = 0;
+  let rnd = seed || 1; const rand = () => ((rnd = (rnd * 16807) % 2147483647) / 2147483647) - 0.5;
+  let start = 1, prevStart = 0, prevLen = 1;
+  for (let r = 0; r < rounds.length; r++) {
+    const n = counts[r];
+    const parents = [];
+    if (r === 0) for (let k = 0; k < n; k++) parents.push([0]);
+    else { let j = 0; for (const o of rounds[r].ops) { const P = q => prevStart + (q % prevLen); if (o === 'S') { parents.push([P(j)]); j++; } else if (o === 'I') { parents.push([P(j)], [P(j)]); j++; } else { parents.push([P(j), P(j + 1)]); j += 2; } } }
+    const phase = r === 0 ? 0 : ang[parents[0][0]];
+    for (let k = 0; k < n; k++) {
+      const id = start + k, p = parents[k];
+      roundOf[id] = r; par0[id] = p[0]; par1[id] = p[p.length - 1];
+      ringPrev[id] = start + ((k - 1 + n) % n); ringNext[id] = start + ((k + 1) % n);
+      const a = phase + TAU * (k + 0.5) / n; ang[id] = a;
+      const rr = prof.r[r] + rand() * 0.08, zz = prof.z[r] + rand() * 0.08;
+      pos[id * 3] = rr * Math.cos(a); pos[id * 3 + 1] = zz; pos[id * 3 + 2] = rr * Math.sin(a);
+      spring(id, ringNext[id], W, 1);
+      spring(id, start + ((k + 2) % n), 2 * W * 0.985, 0.06);
+      if (r === 0) spring(id, 0, Math.max(0.35, n * W / TAU), 1);
+      else {
+        for (const q of p) spring(id, q, p.length > 1 ? Math.hypot(H, W / 2) : H, 1);
+        const g = par0[p[0]]; if (g) spring(id, g, 2 * H * 0.97, 0.06);
+      }
+    }
+    // triangles between this round and the one below
+    for (let k = 0; k < n; k++) {
+      const c = start + k, c2 = start + ((k + 1) % n), p = parents[k], pn = parents[(k + 1) % n];
+      if (r === 0) { tris.push(c, c2, 0); continue; }
+      if (p.length > 1) tris.push(c, p[1], p[0]);
+      const lp = p[p.length - 1], fp = pn[0];
+      tris.push(c, c2, lp);
+      if (fp !== lp) { tris.push(c2, fp, lp); spring(c2, lp, Math.hypot(H, W), 0.5); }
+    }
+    prevStart = start; prevLen = n; start += n;
+  }
+  prv.set(pos);
+  const sim = { N, pos, prv, roundOf, ringPrev, ringNext, par0, par1, counts, prof,
+    sA: Int32Array.from(sA), sB: Int32Array.from(sB), sR: Float32Array.from(sR), sK: Float32Array.from(sK),
+    tris: Uint32Array.from(tris), nrm: new Float32Array(N * 3), sign: 1, frames: 0 };
+  computeNormals(sim);
+  // orient normals outward
+  let dot = 0; for (let i = 1; i < N; i++) { const x = pos[i * 3], z = pos[i * 3 + 2]; dot += sim.nrm[i * 3] * x + sim.nrm[i * 3 + 2] * z; }
+  sim.sign = dot < 0 ? -1 : 1;
+  return sim;
+}
+function computeNormals(sim) {
+  const { pos, nrm, tris } = sim; nrm.fill(0);
+  for (let t = 0; t < tris.length; t += 3) {
+    const a = tris[t] * 3, b = tris[t + 1] * 3, c = tris[t + 2] * 3;
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    for (const q of [a, b, c]) { nrm[q] += nx; nrm[q + 1] += ny; nrm[q + 2] += nz; }
+  }
+}
+function simStep(sim, stuffed) {
+  const { N, pos, prv, nrm, sA, sB, sR, sK } = sim;
+  computeNormals(sim);
+  const pr = stuffed ? 0.0035 * sim.sign : 0;
+  for (let i = 0; i < N; i++) {
+    const j = i * 3;
+    for (let d = 0; d < 3; d++) { const x = pos[j + d], v = (x - prv[j + d]) * 0.86; prv[j + d] = x; pos[j + d] = x + v + pr * nrm[j + d]; }
+  }
+  const M = sA.length;
+  for (let it = 0; it < 14; it++) {
+    for (let s = 0; s < M; s++) {
+      const a = sA[s] * 3, b = sB[s] * 3;
+      const dx = pos[b] - pos[a], dy = pos[b + 1] - pos[a + 1], dz = pos[b + 2] - pos[a + 2];
+      const L = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, f = ((L - sR[s]) / L) * 0.5 * sK[s];
+      pos[a] += dx * f; pos[a + 1] += dy * f; pos[a + 2] += dz * f;
+      pos[b] -= dx * f; pos[b + 1] -= dy * f; pos[b + 2] -= dz * f;
+    }
+  }
+  sim.frames++;
+}
+
+// ---------- app ----------
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const YARNS = [['Coral', '#ef7b6c'], ['Marigold', '#eaa83a'], ['Lavender', '#b4a1e2'], ['Denim', '#5b7fc4'], ['Oat', '#e9dfc8'], ['Moss', '#8fae6a']];
+const S = { key: 'sphere', R: 18, lambda: 0.7, ga: null, tgt: null, running: false, shown: null, shownRounds: null, sim: null,
+  stuffed: true, stripes: false, skin: true, yarn: 0, lastRate: 0, rateEvals: 0, rateT: performance.now(), dirty: false, lastShow: 0, fit: true, userPattern: false };
+
+function setTarget(key) {
+  S.key = key; const T = TARGETS[key];
+  document.querySelectorAll('.tbtn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === key)));
+  $('drawHint').hidden = key !== 'custom'; $('profile').classList.toggle('draw', key === 'custom');
+  S.stuffed = T.closed; $('stuff').setAttribute('aria-pressed', String(S.stuffed));
+  reseed(); start();
+}
+function reseed() {
+  S.tgt = prepareTarget(TARGETS[S.key], S.R);
+  S.ga = makeGA(S.tgt, S.lambda);
+  for (let i = 0; i < 3; i++) gaStep(S.ga);
+  S.fit = true; S.userPattern = false; S.dirty = true; showBest(true);
+}
+function start() { S.running = true; S.ga.stall = 0; updateGo(); }
+function stop(msg) { S.running = false; updateGo(msg); if (S.dirty) showBest(); }
+function updateGo(msg) {
+  const b = $('go'); b.textContent = S.running ? 'Stop' : 'Evolve patterns'; b.classList.toggle('running', S.running);
+  const pill = $('fitPill');
+  if (S.running) { pill.textContent = 'searching'; pill.style.background = css('--fit'); }
+  else if (msg) { pill.textContent = msg; pill.style.background = css('--good'); }
+  else { pill.textContent = 'paused'; pill.style.background = css('--muted'); }
+}
+function showBest(force) {
+  if (!S.ga.best) return;
+  const rounds = roundsFromCounts(S.ga.best);
+  showRounds(rounds, force);
+  $('pattern').value = formatPattern(rounds); $('warns').innerHTML = '';
+  S.dirty = false; S.lastShow = performance.now();
+}
+function showRounds(rounds, fit) {
+  S.shownRounds = rounds; S.shown = countsFromRounds(rounds);
+  S.sim = buildSim(rounds, (Math.random() * 1e9) | 1);
+  if (G.ok) buildMeshes(fit || S.fit); S.fit = false;
+  drawProfile(); updateStats();
+}
+
+// ---------- stats + charts ----------
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+function updateStats() {
+  $('sEvals').textContent = fmt(S.ga.evals); $('sGen').textContent = fmt(S.ga.gen); $('sRate').textContent = fmt(S.lastRate);
+  if (S.shown) {
+    const c = S.shown, t = S.userPattern ? prepareTarget(TARGETS[S.key], c.length) : S.tgt;
+    const p = evaluate(c, t, S.lambda, true), miss = p.rms * TAU / W;
+    $('sErr').textContent = '±' + miss.toFixed(1) + ' st';
+    $('sErr').style.color = miss < 1.5 ? css('--good') : miss < 4 ? css('--warn') : css('--bad');
+    const tot = c.reduce((a, b) => a + b, 0); $('sSt').textContent = fmt(tot);
+    const min = tot / 20; $('sTime').textContent = min < 60 ? Math.round(min) + ' min' : (min / 60).toFixed(1) + ' h';
+    $('topinfo').innerHTML = `<b>${S.userPattern ? 'your pattern' : 'best of ' + fmt(S.ga.evals)}</b><br>${c.length} rounds · ${tot} sc · widest ${Math.max(...c)} st` + (p.exc > 0.05 ? '<br>rounds grow too fast: expect ruffles' : '');
+  }
+}
+function fitCanvas(cv) { const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); } const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return { g, w: r.width, h: r.height }; }
+let profMap = null;
+function drawProfile() {
+  const cv = $('profile'), { g, w, h } = fitCanvas(cv); g.clearRect(0, 0, w, h);
+  const T = TARGETS[S.key], c = S.shown; if (!c) return;
+  const t = S.userPattern ? prepareTarget(T, c.length) : S.tgt, k = t.k, prof = profileOf(c);
+  let maxR = 0, maxZ = 0; T.pts.forEach(p => { maxR = Math.max(maxR, p[0] * k); maxZ = Math.max(maxZ, p[1] * k); });
+  prof.r.forEach(v => (maxR = Math.max(maxR, v))); prof.z.forEach(v => (maxZ = Math.max(maxZ, v)));
+  const pad = 18, sc = Math.min((w - pad * 2) / (2 * maxR || 1), (h - pad * 2) / (maxZ || 1)), cx = w / 2, by = h - pad - (h - pad * 2 - maxZ * sc) / 2;
+  const fl = t.flip; const Y = z => fl ? by - (maxZ - z) * sc : by - z * sc;
+  profMap = { cx, by, sc, k, maxZ, fl };
+  g.strokeStyle = css('--line'); g.lineWidth = 1; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(cx, 4); g.lineTo(cx, h - 4); g.stroke(); g.setLineDash([]);
+  g.font = '10px ' + css('--mono'); g.fillStyle = css('--muted');
+  for (let z = 0; z <= maxZ + 0.01; z += 5 * H) { const y = Y(z); g.fillRect(4, y, 6, 1); g.fillText(Math.round(z / H), 12, y + 3); }
+  g.strokeStyle = css('--target'); g.lineWidth = 2;
+  for (const s of [1, -1]) { g.beginPath(); T.pts.forEach((p, i) => { const x = cx + s * p[0] * k * sc, y = Y(p[1] * k); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); }
+  g.fillStyle = css('--fit'); g.strokeStyle = css('--fit'); g.lineWidth = 1.2;
+  for (const s of [1, -1]) {
+    g.beginPath(); g.moveTo(cx, Y(0)); for (let i = 0; i < c.length; i++) g.lineTo(cx + s * prof.r[i] * sc, Y(prof.z[i])); g.stroke();
+    for (let i = 0; i < c.length; i++) { g.beginPath(); g.arc(cx + s * prof.r[i] * sc, Y(prof.z[i]), 2.4, 0, TAU); g.fill(); }
+  }
+}
+function drawConv() {
+  const { g, w, h } = fitCanvas($('conv')); g.clearRect(0, 0, w, h);
+  const hs = S.ga.hist; if (hs.length < 2) return;
+  const lo = Math.log(Math.min(...hs) + 1e-4), hi = Math.log(Math.max(...hs) + 1e-4) || lo + 1;
+  const X = i => 6 + (i / (hs.length - 1)) * (w - 12), Yv = v => 6 + (1 - (Math.log(v + 1e-4) - lo) / ((hi - lo) || 1)) * (h - 12);
+  g.beginPath(); hs.forEach((v, i) => (i ? g.lineTo(X(i), Yv(v)) : g.moveTo(X(i), Yv(v))));
+  g.strokeStyle = css('--fit'); g.lineWidth = 1.6; g.stroke();
+  g.lineTo(X(hs.length - 1), h); g.lineTo(X(0), h); g.closePath(); g.globalAlpha = 0.12; g.fillStyle = css('--fit'); g.fill(); g.globalAlpha = 1;
+  g.beginPath(); g.arc(X(hs.length - 1), Yv(hs[hs.length - 1]), 3, 0, TAU); g.fill();
+}
+
+// custom silhouette drawing
+(function () {
+  const cv = $('profile'); let drawing = false, pts = [];
+  const toRZ = e => { const r = cv.getBoundingClientRect(); return [Math.abs(e.clientX - r.left - r.width / 2), r.height - (e.clientY - r.top)]; };
+  cv.addEventListener('pointerdown', e => { if (S.key !== 'custom') return; drawing = true; pts = [toRZ(e)]; cv.setPointerCapture(e.pointerId); stop(); });
+  cv.addEventListener('pointermove', e => {
+    if (!drawing) return; const p = toRZ(e), q = pts[pts.length - 1]; if (Math.hypot(p[0] - q[0], p[1] - q[1]) > 3) pts.push(p);
+    const { g } = fitCanvas(cv); g.strokeStyle = css('--target'); g.lineWidth = 2; g.beginPath(); const r = cv.getBoundingClientRect();
+    pts.forEach((p, i) => { const x = r.width / 2 + p[0], y = r.height - p[1]; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  });
+  cv.addEventListener('pointerup', () => {
+    if (!drawing) return; drawing = false; if (pts.length < 6) { drawProfile(); return; }
+    const z0 = pts[0][1]; let p = pts.map(([r, z]) => [r, Math.abs(z - z0)]);
+    if (p[0][0] > 0.5) p.unshift([0, p[0][1]]); else p[0][0] = 0;
+    const maxR = Math.max(...p.map(q => q[0])); const last = p[p.length - 1];
+    const closed = last[0] < 0.15 * maxR; if (closed) p.push([0, last[1]]);
+    TARGETS.custom.pts = p; TARGETS.custom.closed = closed;
+    S.stuffed = closed; $('stuff').setAttribute('aria-pressed', String(closed));
+    thumb(document.querySelector('.tbtn[data-k=custom] canvas'), TARGETS.custom);
+    reseed(); start();
+  });
+})();
+
+// ---------- three.js ----------
+const G = { ok: false };
+function initThree() {
+  try {
+    if (!window.THREE) throw new Error('three missing');
+    const cv = $('three');
+    G.renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+    G.renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+    G.scene = new THREE.Scene();
+    G.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
+    G.controls = new THREE.OrbitControls(G.camera, cv); G.controls.enableDamping = true; G.controls.dampingFactor = 0.08;
+    G.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x1d3b32, 0.85));
+    const d = new THREE.DirectionalLight(0xffffff, 0.75); d.position.set(6, 12, 9); G.scene.add(d);
+    const f = new THREE.DirectionalLight(0xbcd7ff, 0.3); f.position.set(-8, 4, -6); G.scene.add(f);
+    G.group = new THREE.Group(); G.scene.add(G.group);
+    const leg = (s) => { const q = new THREE.SphereGeometry(0.5, 10, 7); q.scale(0.3, 0.62, 0.24); q.rotateZ(0.42 * s); q.translate(-0.17 * s, 0, 0); return q; };
+    G.legL = leg(1); G.legR = leg(-1);
+    G.stitchMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0 });
+    G.skinMat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, side: THREE.DoubleSide });
+    new ResizeObserver(resize).observe($('mat')); resize();
+    G.ok = true;
+  } catch (e) {
+    const d = document.createElement('div'); d.className = 'nogl'; d.textContent = 'The 3D view needs WebGL, which this browser did not provide. The pattern search and profile still work.'; $('mat').appendChild(d);
+  }
+}
+function resize() { const r = $('mat').getBoundingClientRect(); G.renderer.setSize(r.width, r.height, false); G.camera.aspect = r.width / Math.max(1, r.height); G.camera.updateProjectionMatrix(); }
+function buildMeshes(fit) {
+  const sim = S.sim;
+  for (const m of [G.skin, G.iL, G.iR]) if (m) { G.group.remove(m); m.geometry !== G.legL && m.geometry !== G.legR && m.geometry.dispose(); m.dispose && m.dispose(); }
+  const geo = new THREE.BufferGeometry();
+  G.posAttr = new THREE.BufferAttribute(sim.pos, 3); G.posAttr.setUsage(THREE.DynamicDrawUsage);
+  G.nrmAttr = new THREE.BufferAttribute(new Float32Array(sim.N * 3), 3); G.nrmAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', G.posAttr); geo.setAttribute('normal', G.nrmAttr); geo.setIndex(new THREE.BufferAttribute(sim.tris, 1));
+  G.skin = new THREE.Mesh(geo, G.skinMat); G.skin.visible = S.skin;
+  const n = sim.N - 1;
+  G.iL = new THREE.InstancedMesh(G.legL, G.stitchMat, n); G.iR = new THREE.InstancedMesh(G.legR, G.stitchMat, n);
+  G.iL.instanceMatrix.setUsage(THREE.DynamicDrawUsage); G.iR.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  G.group.add(G.skin, G.iL, G.iR);
+  colorize();
+  G.group.rotation.set(S.tgt.flip ? Math.PI : 0, 0, 0);
+  if (fit) {
+    const maxR = Math.max(...sim.prof.r), hgt = sim.prof.z[sim.prof.z.length - 1];
+    const cy = S.tgt.flip ? -hgt / 2 : hgt / 2, dist = Math.max(maxR * 2.2, hgt * 1.25) * 1.9 + 4;
+    G.controls.target.set(0, cy, 0); G.camera.position.set(dist * 0.62, cy + dist * 0.42, dist * 0.7); G.controls.update();
+  }
+  updateMeshes();
+}
+function colorize() {
+  const sim = S.sim, base = new THREE.Color(YARNS[S.yarn][1]), alt = new THREE.Color(YARNS[(S.yarn + 4) % YARNS.length][1]);
+  const col = new THREE.Color();
+  for (let i = 1; i < sim.N; i++) {
+    col.copy(S.stripes && Math.floor(sim.roundOf[i] / 2) % 2 ? alt : base);
+    const v = 0.93 + 0.07 * ((i * 2654435761) % 97) / 97; col.multiplyScalar(v);
+    G.iL.setColorAt(i - 1, col); G.iR.setColorAt(i - 1, col);
+  }
+  G.iL.instanceColor.needsUpdate = G.iR.instanceColor.needsUpdate = true;
+  G.skinMat.color.copy(base).multiplyScalar(0.5);
+}
+const _m = new THREE_safe('Matrix4'), _t = new THREE_safe('Vector3'), _u = new THREE_safe('Vector3'), _n = new THREE_safe('Vector3'), _p = new THREE_safe('Vector3');
+function THREE_safe(k) { return window.THREE ? new THREE[k]() : null; }
+function updateMeshes() {
+  const sim = S.sim, P = sim.pos, Nr = sim.nrm, sg = sim.sign, na = G.nrmAttr.array;
+  for (let i = 0; i < sim.N; i++) { const j = i * 3, l = Math.hypot(Nr[j], Nr[j + 1], Nr[j + 2]) || 1; na[j] = sg * Nr[j] / l; na[j + 1] = sg * Nr[j + 1] / l; na[j + 2] = sg * Nr[j + 2] / l; }
+  for (let i = 1; i < sim.N; i++) {
+    const j = i * 3, a = sim.ringNext[i] * 3, b = sim.ringPrev[i] * 3, p0 = sim.par0[i] * 3, p1 = sim.par1[i] * 3;
+    _t.set(P[a] - P[b], P[a + 1] - P[b + 1], P[a + 2] - P[b + 2]).normalize();
+    _u.set(P[j] - (P[p0] + P[p1]) / 2, P[j + 1] - (P[p0 + 1] + P[p1 + 1]) / 2, P[j + 2] - (P[p0 + 2] + P[p1 + 2]) / 2);
+    _n.set(na[j], na[j + 1], na[j + 2]);
+    _u.sub(_t.clone().multiplyScalar(_u.dot(_t))).normalize();
+    _n.crossVectors(_t, _u).normalize(); if (_n.x * na[j] + _n.y * na[j + 1] + _n.z * na[j + 2] < 0) { _t.negate(); _n.negate(); }
+    _p.set(P[j], P[j + 1], P[j + 2]).addScaledVector(_u, -0.42 * H).addScaledVector(_n, 0.07);
+    _m.makeBasis(_t, _u, _n).setPosition(_p);
+    G.iL.setMatrixAt(i - 1, _m); G.iR.setMatrixAt(i - 1, _m);
+  }
+  G.iL.instanceMatrix.needsUpdate = G.iR.instanceMatrix.needsUpdate = true;
+  G.posAttr.needsUpdate = true; G.nrmAttr.needsUpdate = true; G.skin.geometry.computeBoundingSphere();
+}
+
+// ---------- loop ----------
+function frame(now) {
+  if (S.running) {
+    const t0 = performance.now(); let imp = false;
+    while (performance.now() - t0 < 10) { if (gaStep(S.ga)) imp = true; }
+    if (S.ga.gen % 4 === 0) { S.ga.hist.push(S.ga.bestScore); if (S.ga.hist.length > 400) S.ga.hist.splice(0, S.ga.hist.length - 400); }
+    if (imp) S.dirty = true;
+    if (S.dirty && now - S.lastShow > 350) showBest();
+    if (S.ga.stall > 1500) stop('converged');
+  }
+  if (now - S.rateT > 500) { S.lastRate = (S.ga.evals - S.rateEvals) / ((now - S.rateT) / 1000); S.rateEvals = S.ga.evals; S.rateT = now; if (!S.running) S.lastRate = 0; updateStats(); drawConv(); }
+  if (G.ok && S.sim) {
+    if (S.sim.frames < 900) { simStep(S.sim, S.stuffed); simStep(S.sim, S.stuffed); updateMeshes(); }
+    G.controls.update(); G.renderer.render(G.scene, G.camera);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- UI wiring ----------
+function thumb(cv, T) {
+  const d = 2; cv.width = 40 * d; cv.height = 40 * d; const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, 40, 40);
+  let mr = 0, mz = 0; T.pts.forEach(p => { mr = Math.max(mr, p[0]); mz = Math.max(mz, p[1]); });
+  const s = Math.min(34 / (2 * mr || 1), 34 / (mz || 1)), by = 20 + mz * s / 2;
+  const Y = z => T.flip ? by - (mz - z) * s : by - z * s;
+  g.beginPath(); T.pts.forEach((p, i) => { const x = 20 + p[0] * s, y = Y(p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+  for (let i = T.pts.length - 1; i >= 0; i--) g.lineTo(20 - T.pts[i][0] * s, Y(T.pts[i][1]));
+  if (T.closed) { g.closePath(); g.fillStyle = css('--ink'); g.globalAlpha = 0.85; g.fill(); g.globalAlpha = 1; }
+  else { g.strokeStyle = css('--ink'); g.lineWidth = 2; g.stroke(); }
+}
+function initUI() {
+  const tg = $('targets');
+  for (const k of Object.keys(TARGETS)) {
+    const b = document.createElement('button'); b.className = 'tbtn'; b.dataset.k = k; b.setAttribute('aria-pressed', 'false');
+    const c = document.createElement('canvas'); b.appendChild(c); b.appendChild(document.createTextNode(TARGETS[k].label));
+    b.onclick = () => setTarget(k); tg.appendChild(b); thumb(c, TARGETS[k]);
+  }
+  const yr = $('yarns');
+  YARNS.forEach(([n, hex], i) => { const b = document.createElement('button'); b.className = 'sw'; b.style.background = hex; b.title = n; b.setAttribute('aria-label', n + ' yarn'); b.setAttribute('aria-pressed', String(i === S.yarn));
+    b.onclick = () => { S.yarn = i; yr.querySelectorAll('.sw').forEach((x, j) => x.setAttribute('aria-pressed', String(j === i))); if (G.ok && S.sim) colorize(); }; yr.appendChild(b); });
+  const sz = $('size'), lam = $('lam');
+  const lamOf = v => (v / 100) * 2;
+  const upd = () => { $('sizeV').textContent = sz.value + ' rounds'; $('lamV').textContent = +lam.value < 25 ? 'shape first' : +lam.value > 70 ? 'simple first' : 'balanced'; };
+  sz.oninput = upd; lam.oninput = upd; upd();
+  sz.onchange = () => { S.R = +sz.value; reseed(); start(); };
+  lam.onchange = () => { S.lambda = lamOf(+lam.value); S.ga.lambda = S.lambda; S.ga.bestScore = Infinity; S.ga.sc = S.ga.pop.map(a => evaluate(a, S.tgt, S.lambda)); start(); };
+  S.lambda = lamOf(+lam.value);
+  $('go').onclick = () => (S.running ? stop() : (S.userPattern && reseed(), start()));
+  $('reseed').onclick = () => { reseed(); start(); };
+  const tog = (id, key, after) => $(id).onclick = () => { S[key] = !S[key]; $(id).setAttribute('aria-pressed', String(S[key])); after && after(); };
+  tog('stuff', 'stuffed', () => S.sim && (S.sim.frames = 0));
+  tog('stripes', 'stripes', () => G.ok && S.sim && colorize());
+  tog('skin', 'skin', () => G.skin && (G.skin.visible = S.skin));
+  $('relax').onclick = () => S.shownRounds && showRounds(S.shownRounds, false);
+  $('sim').onclick = () => {
+    stop(); const { rounds, warns } = parsePattern($('pattern').value);
+    $('warns').innerHTML = warns.map(w => `<div>${w.replace(/</g, '&lt;')}</div>`).join('');
+    S.userPattern = true; S.fit = true; showRounds(rounds, true); $('fitPill').textContent = 'your pattern'; $('fitPill').style.background = css('--warn');
+  };
+  $('copy').onclick = () => { const t = $('pattern'); const done = () => { $('copy').textContent = 'Copied'; setTimeout(() => ($('copy').textContent = 'Copy'), 1400); };
+    try { navigator.clipboard.writeText(t.value).then(done, () => { t.select(); }); } catch (e) { t.select(); } };
+  $('xpy').onclick = () => copyText(blenderScript(), $('xpy'));
+  $('xobj').onclick = () => copyText(objText(), $('xobj'));
+  addEventListener('resize', () => { drawProfile(); drawConv(); });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { drawProfile(); document.querySelectorAll('.tbtn').forEach(b => thumb(b.querySelector('canvas'), TARGETS[b.dataset.k])); });
+}
+
+// ---------- Blender / OBJ export (Blender is Z-up; 1 stitch width = 6 mm) ----------
+const MM_PER_ST = 0.006;
+function meshData() {
+  const sim = S.sim, P = sim.pos, fl = S.tgt && S.tgt.flip, r6 = x => Math.round(x * MM_PER_ST * 1e6) / 1e6;
+  const v = [], f = [];
+  for (let i = 0; i < sim.N; i++) { let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2]; if (fl) { y = -y; z = -z; } v.push([r6(x), r6(-z), r6(y)]); }
+  for (let t = 0; t < sim.tris.length; t += 3) { const a = sim.tris[t], b = sim.tris[t + 1], c = sim.tris[t + 2]; f.push(sim.sign > 0 ? [a, b, c] : [a, c, b]); }
+  return { v, f };
+}
+function patternComment(pre) { return $('pattern').value.split('\n').map(l => pre + l).join('\n'); }
+function objText() {
+  const { v, f } = meshData();
+  return `# Hookloop Crochet Lab export, units: metres (1 stitch = 6 mm)\n${patternComment('# ')}\no Hookloop\n` + v.map(p => `v ${p[0]} ${p[1]} ${p[2]}`).join('\n') + '\n' + f.map(t => `f ${t[0] + 1} ${t[1] + 1} ${t[2] + 1}`).join('\n') + '\n';
+}
+function blenderScript() {
+  const { v, f } = meshData(), hex = YARNS[S.yarn][1];
+  const lin = i => { const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255; return +(c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)).toFixed(4); };
+  return `# Hookloop Crochet Lab export. Blender 2.8+: paste into the Scripting tab and Run Script.
+${patternComment('# ')}
+import bpy
+V = ${JSON.stringify(v)}
+F = ${JSON.stringify(f)}
+me = bpy.data.meshes.new("Hookloop")
+me.from_pydata(V, [], F)
+me.update()
+ob = bpy.data.objects.new("Hookloop", me)
+bpy.context.collection.objects.link(ob)
+for p in me.polygons:
+    p.use_smooth = True
+mat = bpy.data.materials.new("Yarn ${YARNS[S.yarn][0]}")
+mat.use_nodes = True
+bsdf = mat.node_tree.nodes.get("Principled BSDF")
+if bsdf:
+    bsdf.inputs["Base Color"].default_value = (${lin(0)}, ${lin(1)}, ${lin(2)}, 1)
+    bsdf.inputs["Roughness"].default_value = 0.9
+me.materials.append(mat)
+ob.modifiers.new("Subdivision", "SUBSURF").levels = 1
+for o in bpy.context.selected_objects:
+    o.select_set(False)
+bpy.context.view_layer.objects.active = ob
+ob.select_set(True)
+`;
+}
+function copyText(text, btn) {
+  const box = $('exportBox'), label = btn.dataset.label || (btn.dataset.label = btn.textContent);
+  const ok = () => { box.hidden = true; btn.textContent = 'Copied'; setTimeout(() => (btn.textContent = label), 1400); };
+  const fail = () => { box.hidden = false; box.value = text; box.focus(); box.select(); btn.textContent = label; };
+  try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); }
+}
+
+initThree();
+initUI();
+setTarget('sphere');
+requestAnimationFrame(frame);
+</script>
