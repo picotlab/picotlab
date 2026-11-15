@@ -2034,6 +2034,7 @@ function exParse(s) {
   let curLoop = null;
   const OPS = /^(?:sc|hdc|dc|tr)$/;
   const mark = sp => { const k = sp[0], n = +sp.slice(1) || 0; return k === 'M' ? { times: n + 1 } : k === 'N' ? { times: n + 1, alt: n } : k === 'E' ? { end: true } : k === 'L' ? { last: n } : { unsure: true }; };
+  const openEnd = i => (tok[i] === 'around' || tok[i] === 'across' ? 1 : tok[i] === 'to' && tok[i + 1] === 'end' ? 2 : tok[i] === 'to' && tok[i + 1] === 'the' && tok[i + 2] === 'end' ? 3 : 0); /* how many tokens an open-ended "around / across / to end" takes */
   function seq(stop) {
     const out = []; let clauseStart = 0;
     while (T.i < tok.length && tok[T.i] !== ')' && !(stop && stop(tok[T.i]))) {
@@ -2042,7 +2043,7 @@ function exParse(s) {
       if (/^\*+$/.test(t)) {
         T.i++; const unit = seq(x => /^\*+$/.test(x) || /^§/.test(x)); if (/^\*+$/.test(tok[T.i] || '')) T.i++;
         let k = T.i; while (/^[,;.]$/.test(tok[k] || '')) k++;
-        if (/^§/.test(tok[k] || '')) { T.i = k + 1; out.push({ t: 'rep', items: unit, spec: mark(tok[k].slice(1, -1)), star: true }); } else out.push({ t: 'rep', items: unit, spec: { once: true }, star: true });
+        if (/^§/.test(tok[k] || '')) { T.i = k + 1; out.push({ t: 'rep', items: unit, spec: mark(tok[k].slice(1, -1)), star: true }); } else { const oe = openEnd(T.i); if (oe) { T.i += oe; out.push({ t: 'rep', items: unit, spec: { end: true }, star: true }); } else out.push({ t: 'rep', items: unit, spec: { once: true }, star: true }); }
         continue;
       }
       if (/^§/.test(t)) { T.i++; const unit = out.splice(0); if (unit.length) out.push({ t: 'rep', items: unit, spec: mark(t.slice(1, -1)), star: true }); continue; }
@@ -2054,6 +2055,7 @@ function exParse(s) {
         if (isN(tok[T.i]) && /^times?$/.test(tok[T.i + 1] || '')) { const k = +tok[T.i]; T.i += 2; tail({ t: 'rep', items, spec: { times: k } }); continue; }
         if (tok[T.i] === 'in' || tok[T.i] === 'into') { T.i++; const tg = exTarget(T); let g = { t: 'grp', items, tgt: tg || { to: 'next', kind: 'st', n: 1 } }; if (!tg) unknown.add('in'); out.push(g);
           if (tok[T.i] === 'x' && isN(tok[T.i + 1])) { out[out.length - 1] = { t: 'rep', items: [g], spec: { times: +tok[T.i + 1] } }; T.i += 2; } else if (isN(tok[T.i]) && /^times?$/.test(tok[T.i + 1] || '')) { out[out.length - 1] = { t: 'rep', items: [g], spec: { times: +tok[T.i] } }; T.i += 2; } continue; }
+        { const oe = items.length ? openEnd(T.i) : 0; if (oe) { T.i += oe; out.push({ t: 'rep', items, spec: { end: true } }); continue; } }
         out.push({ t: 'grp', items, tgt: null }); continue;
       }
       if (/^LOOP[FB]$/.test(t)) { curLoop = t === 'LOOPF' ? 'front' : 'back'; T.i++; continue; }
@@ -2102,7 +2104,7 @@ function exCount(nodes, amb) {
     else if (nd.t === 'ss') { if (nd.tgt && nd.tgt.to === 'fill') c.ok = false; c.used += nd.tgt && nd.tgt.to === 'same' ? 0 : nd.n; }
     else if (nd.t === 'tgt') { if (nd.tgt.to === 'each') c.used += nd.tgt.n; else if (nd.tgt.to === 'fill') c.ok = false; c.made += nd.tgt.to === 'each' ? nd.tgt.n : 1; }
     else if (nd.t === 'grp') { const a = exCount(nd.items, amb); c.made += a.made; c.chains += a.chains; c.sps += a.sps; if (!a.ok) c.ok = false; const g = nd.tgt; c.used += g ? (g.to === 'each' ? g.n : g.to === 'same' ? 0 : 1) : a.used; if (g && g.to === 'fill') c.ok = false; }
-    else if (nd.t === 'rep') { const a = exCount(nd.items, amb), sp = nd.spec; const k = sp.times ? (sp.alt != null && amb ? sp.alt : sp.times) : sp.once ? 1 : null; if (k == null) { c.ok = false; add(a, 1); } else add(a, k); if (nd.tgt && k != null) c.used += (nd.tgt.to === 'ring' || nd.tgt.to === 'same' ? 0 : k) - a.used * k; }
+    else if (nd.t === 'rep') { const a = exCount(nd.items, amb), sp = nd.spec; const k = sp.times ? (sp.alt != null && amb ? sp.alt : sp.times) : sp.once ? 1 : sp.infer ? sp.infer.k : null; if (k == null) { c.ok = false; add(a, 1); } else add(a, k); if (nd.tgt && k != null) c.used += (nd.tgt.to === 'ring' || nd.tgt.to === 'same' ? 0 : k) - a.used * k; }
   }
   return c;
 }
@@ -2138,17 +2140,27 @@ function exRender(nodes, depth = 0, inGrp = false) {
     else if (nd.t === 'turn') parts.push({ depth, node: 'turn', say: 'turn the work around: this row is flat, not a ring', hook: null });
     else if (nd.t === 'join') parts.push({ depth, node: 'join', say: 'join with a slip stitch into the first stitch of the round', hook: null });
     else if (nd.t === 'grp') { const c = exCount(nd.items, false); parts.push({ depth, node: 'grp', folded: !!nd.folded, say: `group of ${c.made} stitch${c.made === 1 ? '' : 'es'}${c.chains ? ' and ' + c.chains + ' chain' + (c.chains === 1 ? '' : 's') : ''}, all into one place`, hook: nd.tgt ? H(nd.tgt) : null, items: exRender(nd.items, depth + 1, !!nd.tgt) }); }
-    else if (nd.t === 'rep') { const sp = nd.spec, c = exCount(nd.items, false), when = sp.times ? `${sp.times} times in all${sp.alt != null ? ' (or ' + sp.alt + ' if "' + sp.alt + ' times" meant the total)' : ''}` : sp.end ? 'to the end of the row or round' : sp.last ? `until ${sp.last} stitch${sp.last > 1 ? 'es are' : ' is'} left` : sp.once ? 'once (no repeat instruction on this line)' : nd.star ? 'across the row, until the ending instructions on this line take over (the count of repeats is not printed; it depends on how many stitches you have)' : 'a number of times the line does not state'; parts.push({ depth, node: 'rep', say: `repeat this ${when}${nd.tgt ? ', all worked into the same place' : ''}`, hook: nd.tgt ? exHook(nd.tgt) : null, items: exRender(nd.items, depth + 1, !!nd.tgt) }); }
+    else if (nd.t === 'rep') { const sp = nd.spec, c = exCount(nd.items, false), when = sp.infer ? `${sp.infer.k} time${sp.infer.k === 1 ? '' : 's'} to go all the way ${sp.infer.row ? 'along the row' : 'around'} (worked out from the printed ${sp.infer.stated})` : sp.times ? `${sp.times} times in all${sp.alt != null ? ' (or ' + sp.alt + ' if "' + sp.alt + ' times" meant the total)' : ''}` : sp.end ? (sp.nodiv ? 'to the end of the row or round (the number of repeats cannot be confirmed from this line alone)' : sp.noprint ? 'to the end of the row or round (how many times depends on the stitches in the round below)' : 'to the end of the row or round') : sp.last ? `until ${sp.last} stitch${sp.last > 1 ? 'es are' : ' is'} left` : sp.once ? 'once (no repeat instruction on this line)' : nd.star ? 'across the row, until the ending instructions on this line take over (the count of repeats is not printed; it depends on how many stitches you have)' : 'a number of times the line does not state'; parts.push({ depth, node: 'rep', say: `repeat this ${when}${nd.tgt ? ', all worked into the same place' : ''}`, hook: nd.tgt ? exHook(nd.tgt) : null, items: exRender(nd.items, depth + 1, !!nd.tgt) }); }
   }
   return parts;
 }
 function exFlat(parts, out = []) { for (const p of parts) { out.push(p); if (p.items) exFlat(p.items, out); } return out; }
+function exOpen(nodes, stated, row) { /* an open-ended repeat with a printed count: repeats = (printed - the rest) / what one repeat makes */
+  const open = nodes.filter(n => n.t === 'rep' && n.spec.end); if (open.length !== 1) return null;
+  const nd = open[0], one = exCount(nd.items, false); nd.spec.noprint = stated == null;
+  if (stated == null || !one.ok) return null;
+  const rest = exCount(nodes.map(n => (n === nd ? { t: 'rep', items: nd.items, spec: { infer: { k: 0 } } } : n)), false); if (!rest.ok) return null;
+  for (const per of one.chains ? [one.made, one.made + one.chains] : [one.made]) { const left = stated - (per === one.made ? rest.made : rest.made + rest.chains); if (per > 0 && left > 0 && left % per === 0) { nd.spec.infer = { k: left / per, stated, row }; return null; } }
+  nd.spec.nodiv = true; return { per: one.made, stated };
+}
 function explain(text) {
   const raw = String(text == null ? '' : text).trim(), res = { input: raw, kind: 'empty', terms: [], parts: [], count: null, hooks: [], uk: [], warnings: [], understood: [], unrecognised: [], needsHuman: false, needs: null, text: '' };
   if (!raw) { res.needsHuman = true; res.needs = 'Paste a term, an abbreviation or one line of the pattern.'; res.text = res.needs; return res; }
   const body = exStrip(raw);
   res.terms = exTerms(raw).filter(t => t.id !== 'brackets' || /[(\[]/.test(body));
-  const { s, f } = exNorm(body), P = exParse(s), flat = exFlat(exRender(P.nodes));
+  const { s, f } = exNorm(body), P = exParse(s);
+  const stated = statedCountOf(raw) != null ? statedCountOf(raw) : (workCount(raw) ? workCount(raw).reduce((a, p) => a + p.n, 0) : null), nodiv = exOpen(P.nodes, stated, !!(f.label && f.label.kind === 'row') || /\bturn\b/i.test(raw));
+  const flat = exFlat(exRender(P.nodes));
   res.parts = exRender(P.nodes);
   const hasStitch = nd => nd.some(n => n.t !== 'turn' && n.t !== 'join'), words = raw.replace(/[^a-z0-9]+/gi, ' ').trim().split(' ').length;
   const termOnly = res.terms.length > 0 && (!P.nodes.length || (words <= 3 && !/\d/.test(raw)));
@@ -2156,7 +2168,6 @@ function explain(text) {
   if (f.label) res.label = f.label;
   if (f.sides.length) { res.sides = f.sides; res.terms = res.terms.concat(exTerms('rs')).filter((t, i, a) => a.findIndex(x => x.id === t.id) === i); }
   // the count: what the line makes, and the printed count if there is one
-  const stated = statedCountOf(raw) != null ? statedCountOf(raw) : (workCount(raw) ? workCount(raw).reduce((a, p) => a + p.n, 0) : null);
   if (res.kind === 'line' && P.nodes.length) {
     const c = exCount(P.nodes, false), c2 = exCount(P.nodes, true), n0 = P.nodes[0], n1 = P.nodes[1];
     /* a short opening chain before the stitches ("ch 3, (3 dc, ch 2) x3 in ring") is the beginning chain: not a chain space, and the line does not say if it stands for a stitch */
@@ -2165,6 +2176,7 @@ function explain(text) {
     res.count = { lead: lead || null, made: c.ok ? c.made : null, chains: c.ok ? c.chains : null, used: c.ok ? c.used : null, exact: c.ok, alt: c.ok && (c2.made !== c.made || c2.chains !== c.chains) ? { made: c2.made, chains: c2.chains } : null, stated, agrees: null };
     if (!c.ok) res.count.note = 'The count depends on how many stitches or spaces your row or round has (a repeat "to end" or a fill across), so it cannot be worked out from this line alone.';
     if (stated != null && c.ok) { const alts = q => (lead ? [q.made, q.made + q.chains, q.made + q.sps, q.made + 1, q.made + 1 + q.sps] : [q.made, q.made + q.chains, q.made + q.sps]), ok1 = alts(c).includes(stated), ok2 = c2.ok && alts(c2).includes(stated); res.count.agrees = ok1 || ok2; if (!res.count.agrees) res.warnings.push(`The printed count is ${stated}, but this line makes ${c.made} stitches and ${c.chains} chains${lead ? ' (plus an opening ch ' + lead + ')' : ''}: they disagree. Check the line for a missing part, or whether the count includes chains or spaces.`); else if (!ok1 && ok2) res.warnings.push(`The printed count ${stated} matches only if "rep ... N times" means N times in all, not N more.`); else if (stated !== c.made) res.warnings.push(`The printed count ${stated} matches only if ${stated === c.made + c.sps ? 'each chain space is counted as one stitch' : stated === c.made + 1 || stated === c.made + 1 + c.sps ? 'the opening ch ' + lead + ' stands for a stitch' + (stated === c.made + 1 + c.sps ? ' and each chain space counts as one' : '') : 'chains are counted as stitches'}; the line makes ${c.made} stitches and ${c.chains} chains in ${c.sps} chain run${c.sps === 1 ? '' : 's'}. Confirm that is how this pattern counts.`); }
+    if (nodiv) res.warnings.push(`The printed count is ${nodiv.stated}, but one repeat makes ${nodiv.per} stitches and ${nodiv.stated} is not a whole number of repeats. This may be fine (stitches before or after the repeat, or a different round below), but it cannot be confirmed from this line alone: check the count against the stitches in your round below.`);
     if (f.label && f.label.b > f.label.a) res.count.rows = f.label.b - f.label.a + 1;
   }
   if (f.label && /^(?:work|working|continue)?\s*even/i.test(raw.replace(/^[^:]*:\s*/, '')) && f.label.b >= f.label.a) res.count = Object.assign(res.count || {}, { rows: f.label.b - f.label.a + 1, made: null, exact: false, note: `${f.label.b - f.label.a + 1} ${f.label.kind === 'row' ? 'row' : 'round'}${f.label.b > f.label.a ? 's' : ''} with no change in the stitch count: every row has the same number of stitches as the one before.` });
