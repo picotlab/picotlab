@@ -1121,7 +1121,8 @@ function patternKind(text) {
   const ringy = /\b(?:magic\s+(?:ring|circle|loop)|adjustable\s+ring|\bmr\b|in(?:to)?\s+(?:the\s+)?ring|form\s+a\s+ring)\b/i.test(t);
   const spaces = (t.match(/\bch[\s-]*\d*[\s-]*sp\b|\bsp(?:ace)?s?\b|\bcorner/gi) || []).length;
   const groups = /\bch\s*\d+\s*,\s*(?:\d+\s*dc|dc\s*\d+)\s+in(?:to)?\s+(?:the\s+)?(?:same|ring|base|magic)/i.test(t);
-  if (rndL >= rowsL && (groups || spaces >= 2 && (ringy || /\bcorner|granny/i.test(t) || /from\s+(?:the\s+)?hook/i.test(t)))) return 'granny';
+  const ringGroup = /[(\[]\s*\d+\s*(?:dc|hdc|tr)\s*(?:in(?:to)?\s+(?:the\s+)?(?:ring|loop)\s*)?,\s*ch\s*\d+\s*[)\]]\s*(?:x\s*\d+|\d+\s*times)/i.test(t);
+  if (rndL >= rowsL && (groups || ringGroup || spaces >= 2 && (ringy || /\bcorner|granny/i.test(t) || /from\s+(?:the\s+)?hook/i.test(t)))) return 'granny';
   const found = /^\s*(?:foundation\s*[:.-]?\s*)?ch(?:ain)?\s*\d+/im.test(t) || /^\s*rows?\s*1\b[^\n]*\b(?:from\s+(?:the\s+)?hook|turn)\b/im.test(t);
   if (rowsL > rndL && found && !ringy) return 'rows';
   return 'rounds';
@@ -1838,7 +1839,7 @@ function checkPattern(text) {
   // 2. flat versus ring
   if (P.kind === 'rounds' && (rowL > 0 && rowL >= rndL || turns && !ringy && rowL + rndL > 0)) add('human', 'This reads as rounds in a ring, but the text says "row" and/or "turn", which means a flat piece worked back and forth. Not trusted: the steps would be wrong.');
   if (P.kind === 'rounds' && !ringy && /\bturn\b/i.test(raw)) add('human', 'Found "turn" with no ring: rows are turned, so this is flat, not a ring.');
-  if (P.kind === 'rounds') lines.forEach((ln, i) => { if (/\b(?:sc|hdc|dc|tr)\b[^;.]*?,\s*ch\s*\d+\s*,?\s*(?:\(|\*|\d*\s*(?:sc|hdc|dc|tr)\b)/i.test(ln)) { const ex = explain(ln), agree = ex.count && ex.count.stated != null && ex.count.agrees === true; add(agree ? 'warn' : 'human', `“${ln.slice(0, 60)}”: a chain between stitches makes a space, which the round reader drops.${agree ? ` The printed count ${ex.count.stated} agrees with the line as the explainer reads it, so the explanation is probably right; check the steps against it.` : ' No agreeing printed count: not trusted for steps.'}`, i); } });
+  if (P.kind === 'rounds') lines.forEach((ln, i) => { if (/\b(?:sc|hdc|dc|tr)\b[^;.]*?,\s*ch\s*\d+\s*,?\s*(?:\(|\*|\d*\s*(?:sc|hdc|dc|tr)\b)/i.test(ln)) add('human', `“${ln.slice(0, 60)}”: a chain between stitches makes a space, which the round reader drops, so its steps lose the structure of the line${(() => { const ex = explain(ln); return ex.count && ex.count.stated != null && ex.count.agrees === true ? ` (the printed count ${ex.count.stated} agrees with the explainer's reading, so use the explanation, not the steps)` : ''; })()}. Not trusted for steps.`, i); });;
   // 3. groups and spaces need a reader that knows them
   if (P.kind === 'rounds' && groupsIn) add('human', 'Bracketed groups worked into one stitch or space (for example "(3 dc, ch 2, 3 dc) in next corner sp") were found. The round reader would read them as single stitches. Not trusted.');
   if (P.kind === 'rounds' && spaceWords) add('human', 'Chain spaces, corners or shells were found, which the round reader does not model. Not trusted for steps.');
