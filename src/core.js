@@ -455,7 +455,7 @@ function formatRounds(rounds) {
   }
   return lines.join('\n');
 }
-// ---------- pattern reader: pasted text → rounds (see ventures/picotlab/proof/core-notes.md) ----------
+// ---------- pattern reader: pasted text → rounds ----------
 // Every line ends up as a round, a merged continuation, a note, or an explicit `unread` line: nothing is dropped silently.
 // The count printed at the end of a line ([12], (18 stitches), {14}) is a checksum: it picks between readings and flags disagreement.
 const NUMW = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };

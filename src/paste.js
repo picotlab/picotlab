@@ -22,24 +22,60 @@ function pasteGates(res, counts) {
 function gateText(G) {
   return G.status === 'ok' ? `count ✓ [${G.got}]` : G.status === 'bad' ? `count ✗ printed [${G.stated}], stitches make ${G.got}` : G.status === 'human' ? 'needs a human' : `no count printed (makes ${G.got})`;
 }
+// yarn weight and hook size from the pattern's own header: the lines above the first round that the reader kept as notes
+// (parsePrompt, the same detection as the prompt box). A hook alone picks the nearest yarn weight.
+function pasteDetect(res) {
+  const out = {}, head = []; for (const l of res.lines) { if (l.status === 'round' || l.status === 'merged') break; head.push(l.text); }
+  if (!head.length) return out;
+  const p = parsePrompt(head.join('\n'));
+  if (p.set.yarn && YARN[p.yarn]) out.yarn = p.yarn;
+  if (p.set.hook) out.hook = p.hook;
+  if (out.hook && out.yarn == null) out.yarn = YARN.reduce((b, y) => (Math.abs(y.hook - out.hook) < Math.abs(b.hook - out.hook) ? y : b)).n;
+  return out;
+}
+var PASTE_OV = null;
+function pasteChange() {
+  const y = S.spec.yarn, h = S.spec.hook;
+  $('pasteNote').insertAdjacentHTML('beforeend', `<div class="fields" style="margin-top:6px"><label><span>Yarn weight</span><select id="pasteYarn">${YARN.map(e => `<option value="${e.n}"${e.n === y ? ' selected' : ''}>${e.n} ${esc(e.name)}</option>`).join('')}</select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5" value="${h}"></label></div>`);
+  const go = () => { PASTE_OV = { yarn: +$('pasteYarn').value, hook: +$('pasteHook').value || null }; pasteRead(); };
+  $('pasteYarn').onchange = () => { $('pasteHook').value = YARN[+$('pasteYarn').value].hook; go(); }; $('pasteHook').onchange = go;
+}
+function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; PASTE_OV = null; pasteRead(); }
+const PASTE_EXAMPLE = `Pocket Ball (an original practice pattern)
+Yarn: DK weight (3)
+Hook: 3.5 mm
+Finished size: about 3 cm across
+
+R1: 6 sc in a magic ring [6]
+R2: inc in each st around [12]
+R3: (sc, inc) x6 [18]
+R4: follow chart A for this round [18]
+R5: (sc, dec) x6 [12]
+Stuff the ball firmly.
+R6: dec x6 [6]
+Fasten off, weave the tail through the front loops and pull tight.`;
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
   const res = parsePattern(text), rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
   const joined = rounds.some(r => r.join);
   SHAPES.pasted = { label: 'Pasted pattern', closed: last <= 12 && counts.length > 3, flip: false, pts: [[0, 0], [1, 1]] };
-  const yarn = S.spec ? S.spec.yarn : 4;
-  const spec = normalizeSpec({ item: 'ami', style: 'pasted', height: 10, yarn, hook: YARN[yarn].hook, set: { item: true, style: true, height: true, yarn: true, hook: true } });
+  const det = pasteDetect(res), ov = PASTE_OV || {}, found = ov.yarn != null || det.yarn != null;
+  const yarn = ov.yarn != null ? ov.yarn : det.yarn != null ? det.yarn : 4;
+  const hook = ov.hook || det.hook || YARN[yarn].hook;
+  const spec = normalizeSpec({ item: 'ami', style: 'pasted', height: 10, yarn, hook, set: { item: true, style: true, height: true, yarn: true, hook: true } });
   spec.cal = typeof calActive === 'function' ? calActive() : null;
   const g = gaugeOf(spec);
   PASTE = { res, gates, joined, text };
   S.dirty = false; if (S.running) { S.running = false; updateGo(); }
   S.user = true; S.fit = true; S.spec = spec; S.g = g;
   showDesign({ kind: 'rounds', spec, g, counts, st: rounds.map(r => r.st || 'sc'), rounds, pasted: PASTE }, true);
+  if (typeof renderFields === 'function') renderFields();
   $('pattern').value = text; $('warns').innerHTML = res.warns.map(w => `<div>${esc(w)}</div>`).join('');
   $('pieceTitle').textContent = 'Pasted pattern'; $('patNote').textContent = joined ? 'joined rounds' : 'spiral rounds';
   const n = { ok: 0, bad: 0, none: 0, human: 0 }; gates.forEach(G => n[G.status]++);
   const humanLines = res.lines.filter(l => l.status === 'unread').length;
-  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanLines ? `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.` : 'Every line was read.'} Sized at the standard gauge for ${YARN[yarn].name.toLowerCase()} yarn.`;
+  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanLines ? `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.` : 'Every line was read.'} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <a href="#" id="pasteChg">change</a>`;
+  $('pasteChg').onclick = e => { e.preventDefault(); e.target.remove(); pasteChange(); };
   updateGo('your pattern');
   W.playing = false; $('wPlay').textContent = 'Play';
   if (!W.on) walkToggle(true); else { W.i = 0; walkSetup(); }
@@ -74,6 +110,7 @@ function pastedLinesHTML(P) {
   }).join('');
 }
 function initPaste() {
-  $('pasteGo').onclick = pasteRead;
+  $('pasteGo').onclick = () => { PASTE_OV = null; pasteRead(); };
+  $('pasteEx').onclick = e => { e.preventDefault(); pasteExample(); };
   $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteRead(); } });
 }

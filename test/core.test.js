@@ -252,7 +252,8 @@ for (const t of ['amigurumi egg 8 cm tall in dk', 'amigurumi ball 10 cm tall in 
   ok(C.statedCountOf('Round 6 - 10: Ch 1, hdc around, join (45) - Fasten off after Round 10') === 45 && C.statedCountOf('[Inc, sc] 2 times. {32}') === 32 && C.statedCountOf('(sc, inc) 6 times') === null, 'printed counts anywhere in the line');
   // the spike fixtures, pasted whole: every printed round count recovered (rounds families)
   const FX = (process.env.PICOTLAB_FIXTURES || path.join(__dirname, 'fixtures/patterns'));
-  if (fs.existsSync(FX)) for (const f of fs.readdirSync(FX).filter(f => /^(0[1-4]|09|10)-/.test(f))) {
+  if (!fs.existsSync(FX)) console.log('SKIP fixture paste tests: no pattern fixtures at ' + path.relative(process.cwd(), FX) + ' (set PICOTLAB_FIXTURES to a folder of NN-*.txt fixtures)');
+  else for (const f of fs.readdirSync(FX).filter(f => /^(0[1-4]|09|10)-/.test(f))) {
     const lines = fs.readFileSync(path.join(FX, f), 'utf8').split('\n').slice(1).filter(l => l.trim() && !l.startsWith('#')).join('\n');
     const p = PP(lines), got = C.countsFromRounds(p.rounds), bad = [];
     p.rounds.forEach((rd, i) => { if (rd.warn && rd.warn.some(w => /stated/.test(w))) bad.push('R' + (i + 1)); });
