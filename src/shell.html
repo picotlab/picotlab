@@ -23,7 +23,7 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45;margin:0}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-.app{height:100%;display:grid;grid-template-columns:310px minmax(0,1fr) 370px;grid-template-rows:auto minmax(0,1fr);gap:12px;
+.app{height:100%;display:grid;grid-template-columns:310px minmax(0,1fr) 370px;grid-template-rows:auto auto minmax(0,1fr);gap:12px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
 header{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:-.01em;margin:0}
@@ -135,10 +135,45 @@ textarea{width:100%;resize:vertical;font:13px/1.6 var(--mono);color:var(--ink);b
 details summary{cursor:pointer;font-weight:600}
 details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
 
+/* Explain a line */
+.xpl{grid-column:1/-1;flex-direction:row;gap:18px;max-height:min(330px,40vh);overflow:hidden}
+.xpl .xin{flex:0 0 340px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.xpl .xout{flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--line);padding-left:18px}
+#xplBox{min-height:64px;font:13px/1.5 var(--mono)}
+.xlbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.xq{font:12.5px/1.5 var(--mono);background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:6px 8px;overflow-wrap:anywhere}
+ol.xp{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+ol.xp ol.xp{margin:6px 0 0 6px;padding-left:12px;border-left:2px solid var(--line)}
+ol.xp>li{background:var(--chip);border-radius:8px;padding:7px 10px}
+ol.xp ol.xp>li{background:transparent;padding:2px 0}
+.xsay{font-weight:600}
+.xhook{margin-top:2px;color:var(--fit);font-size:13px}
+.xhook span{font:700 11px var(--body);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.xcount{font-size:13px}.xcount .xlbl{margin-right:4px}
+.xwarn{color:var(--warn);font-size:13px;display:flex;flex-direction:column;gap:4px}
+.xneeds{border:1px solid var(--bad);border-left-width:4px;border-radius:8px;padding:8px 10px;color:var(--ink);background:var(--chip)}
+.xneeds b{color:var(--bad)}
+.xterm{background:var(--chip);border-radius:8px;padding:8px 10px;margin-top:6px}
+.xterm p{margin:2px 0 0;color:var(--ink);max-width:70ch}
+.xterms{display:flex;flex-direction:column;gap:2px}
+.xmore{margin:0;color:var(--muted);font-size:13px}
+.xmoreinfo{font-size:13px}
+.xmoreinfo summary::before{content:"▸";margin-right:6px;font-size:12px}
+.xmoreinfo[open] summary::before{content:"▾"}
+.xmoreinfo p{max-width:70ch}
+.xbanner{border:1px solid var(--warn);border-left-width:4px;border-radius:8px;padding:8px 10px;background:var(--chip);color:var(--ink);font-size:13px}
+.xbanner b{color:var(--warn)}
+ul.xl{margin:6px 0 0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.xcheck{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.xflag{border-top:1px solid var(--line);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.xlineexp{border-top:1px solid var(--line);padding-top:10px}
+#walkLines button.xl2{font:600 11px var(--body);margin-left:6px;padding:0 8px;min-height:28px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+#walkLines .cur button.xl2{border-color:var(--accent-ink);background:transparent;color:var(--accent-ink)}
+
 /* Touch and narrow screens: 44 px tap targets, stacked panels, no sideways scroll */
 @media (max-width:1060px), (pointer:coarse){
   button.btn,.fields select,.fields input[type=number],.fields input[type=text],#phH,.seg button,.chip{min-height:44px}
-  .chip{display:inline-flex;align-items:center}
+  .chip{display:inline-flex;align-items:center;min-width:44px;justify-content:center}
   summary{min-height:44px;display:flex;align-items:center}
   input[type=range]{height:44px}
   input[type=file]{min-height:44px;max-width:100%}
@@ -150,6 +185,7 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
   .fit tr td{height:44px}
   #calBody input,#calBody select{min-height:44px}
   .shbar .btn{min-width:88px}
+  #walkLines button.xl2{display:block;min-height:44px;min-width:44px;padding:0 12px;margin:4px 0 6px}
 }
 @media (max-width:700px){
   .app{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
@@ -177,30 +213,48 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
   .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
   .mat{height:64vh;min-height:380px;order:2} header{order:0} #left{order:1} #right{order:3}
   .panel{overflow:visible}
+  .xpl{flex-direction:column;max-height:none;gap:12px;overflow:visible}
+  .xpl .xin{flex:none}
+  .xpl .xout{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:12px;overflow:visible}
+  #explainSec{order:0}
 }
 </style>
 
 <div class="app">
   <header>
     <h1>Picotlab <span>crochet lab</span></h1>
-    <div class="tag">Describe a hat, scarf, cowl or blanket. Picotlab reads it into a spec, sizes it from your gauge, searches thousands of stitch counts for the best pattern and hooks it at true size.</div>
+    <div class="tag">Stuck on a crochet pattern? Paste the line you are stuck on and Picotlab explains it in plain steps, says where the hook goes and checks the count. Below that: walk a whole pattern through, or design one and see it at true size.</div>
   </header>
 
+  <section class="panel xpl" id="explainSec" aria-labelledby="xplT">
+    <div class="xin">
+      <h2 id="xplT">Explain a line</h2>
+      <label class="lbl" for="xplBox">Paste a line or a term you're stuck on</label>
+      <textarea id="xplBox" spellcheck="false" placeholder="e.g. sc in next ch-1 sp, ch 1, sk next sc"></textarea>
+      <div class="btns"><button class="btn primary" id="xplGo" type="button">Explain it</button></div>
+      <div class="lbl">Try one</div>
+      <div class="chips" id="xplEx"></div>
+    </div>
+    <div class="xout" id="xplOut" aria-live="polite"><p class="note">The answer shows here: what each part means, where the hook goes, how many stitches the line makes, and anything that looks wrong.</p></div>
+  </section>
+
   <aside class="panel" id="left">
+    <div class="sec" id="pasteSec">
+      <label class="lbl" for="pasteBox">Check a whole pattern and walk through it</label>
+      <textarea id="pasteBox" spellcheck="false" placeholder="R1: 6 sc in a magic ring [6]&#10;R2: inc in each st around [12]&#10;R3: (sc, inc) x6 [18]"></textarea>
+      <div class="btns"><button class="btn primary" id="pasteGo">Read it and walk me through</button> <button class="btn" id="pasteEx" type="button">Try an example</button> <button class="btn" id="pasteEx2" type="button">Example it can't read</button></div>
+      <div class="note" id="pasteNote">Each line and its printed count is checked first. A clean pattern is walked through; one with doubtful counts shows a warning; one it cannot read is not shown as steps.</div>
+      <div id="pasteCheck" class="xcheck" hidden aria-live="polite"></div>
+      <div class="fields" id="pasteSet" hidden style="margin-top:8px"><label><span>Yarn weight</span><select id="pasteYarn"></select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5"></label></div>
+    </div>
     <div class="sec">
+      <h2>Or design a piece</h2>
       <label class="lbl" for="prompt">Describe what to make</label>
       <textarea id="prompt" spellcheck="false"></textarea>
       <div class="btns"><button class="btn primary" id="design">Design it</button></div>
       <div class="note" id="parsed" aria-live="polite"></div>
       <div class="lbl">Try one</div>
       <div class="chips" id="examples"></div>
-    </div>
-    <div class="sec" id="pasteSec">
-      <label class="lbl" for="pasteBox">Or paste a pattern to walk through</label>
-      <textarea id="pasteBox" spellcheck="false" placeholder="R1: 6 sc in a magic ring [6]&#10;R2: inc in each st around [12]&#10;R3: (sc, inc) x6 [18]"></textarea>
-      <div class="btns"><button class="btn primary" id="pasteGo">Read it and walk me through</button> <button class="btn" id="pasteEx" type="button">Try an example</button></div>
-      <div class="note" id="pasteNote">Patterns worked in rounds. Each round's printed count is checked; lines the reader can't follow become “needs a human” steps.</div>
-      <div class="fields" id="pasteSet" hidden style="margin-top:8px"><label><span>Yarn weight</span><select id="pasteYarn"></select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5"></label></div>
     </div>
     <details id="photoSec">
       <summary>Or start from a photo</summary>
@@ -266,6 +320,7 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
   <aside class="panel" id="right">
     <div class="sec" id="walkSec" hidden>
       <div class="row"><h2>Walkthrough</h2><span class="note" id="walkPos"></span></div>
+      <div class="xbanner" id="walkBanner" hidden></div>
       <div class="walknow" id="walkNow" aria-live="polite"></div>
       <div class="btns"><button class="btn" id="wBack" aria-label="Step back">◀ Step</button><button class="btn primary" id="wPlay">Play</button><button class="btn" id="wFwd" aria-label="Step forward">Step ▶</button></div>
       <div class="row"><label class="lbl" for="wScrub">Position</label><span class="val" id="wScrubV"></span></div>
@@ -273,6 +328,7 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
       <div class="row"><label class="lbl" for="wSpeed">Speed</label><span class="val" id="wSpeedV"></span></div>
       <input type="range" id="wSpeed" min="0" max="100" value="10">
       <div id="walkLines"></div>
+      <div class="sec xlineexp" id="lnExp" hidden aria-live="polite"></div>
       <div class="note">The hook and yarn motions are a simplified teaching animation, not a physics-accurate yarn simulation. Close-ups play for every stitch at slow speeds, for the first of each kind at medium speeds, and are skipped at high speed so the piece just grows.</div>
     </div>
     <div class="sec">

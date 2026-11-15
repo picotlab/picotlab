@@ -170,6 +170,7 @@ initThree();
 initUI();
 initWalk();
 initPaste();
+initExplain();
 initPhoto();
 initCal();
 $('prompt').value = EXAMPLES[0];

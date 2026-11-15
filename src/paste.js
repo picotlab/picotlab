@@ -46,7 +46,22 @@ function pasteSetInit() {
 }
 function pasteFresh() { PASTE_OV = null; PASTE_SET_OPEN = false; pasteRead(); } // a newly pasted pattern drops any earlier yarn/hook override
 function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; pasteFresh(); }
+function pasteExample2() { $('pasteBox').value = PASTE_EXAMPLE_HUMAN; pasteFresh(); }
 const PASTE_EXAMPLE = `Pocket Ball (an original practice pattern)
+Yarn: DK weight (3)
+Hook: 3.5 mm
+Finished size: about 3 cm across
+
+R1: 6 sc in a magic ring [6]
+R2: inc in each st around [12]
+R3: (sc, inc) x6 [18]
+R4: sc in each st around [18]
+R5: (sc, dec) x6 [12]
+Stuff the ball firmly.
+R6: (dec) x6 [6]
+Fasten off, weave the tail through the front loops and pull tight.`;
+// the same pattern with one round the reader cannot follow: the checker refuses to show it as steps
+const PASTE_EXAMPLE_HUMAN = `Pocket Ball (an original practice pattern)
 Yarn: DK weight (3)
 Hook: 3.5 mm
 Finished size: about 3 cm across
@@ -102,7 +117,11 @@ function pasteReadFlat(P, text) {
 }
 function pasteRead() {
   const text = $('pasteBox').value; if (!text.trim()) { $('pasteNote').textContent = 'Paste a pattern first.'; return; }
-  const P0 = typeof readPattern === 'function' ? readPattern(text) : parsePattern(text);
+  // checkPattern wraps readPattern: ok and warn go on to the walkthrough (warn with one banner); needs-human shows no steps
+  const C = typeof checkPattern === 'function' ? checkPattern(text) : null, P0 = C ? C.P : (typeof readPattern === 'function' ? readPattern(text) : parsePattern(text));
+  $('pasteCheck').hidden = true; $('pasteCheck').innerHTML = '';
+  if (C && !C.show) return pasteHuman(C);
+  if (typeof pasteBanner === 'function') pasteBanner(C);
   if (P0.kind === 'rows' || P0.kind === 'granny') return pasteReadFlat(P0, text);
   const res = P0, rounds = res.rounds, counts = countsFromRounds(rounds), gates = pasteGates(res, counts), last = counts[counts.length - 1];
   const joined = rounds.some(r => r.join), assumed = [];
@@ -180,12 +199,14 @@ function pastedLinesHTML(P) {
     if (l.status === 'unread') badge = '<span class="gate g-human">needs a human</span>';
     else if (l.status === 'note') badge = '<span class="gate g-none">note</span>';
     else if (byLine[i]) { const gs = byLine[i], worst = gs.find(G => G.status === 'human') || gs.find(G => G.status === 'bad') || gs.find(G => G.status === 'none') || gs[0]; badge = `<span class="gate g-${worst.status}">${esc(gs.length > 1 && worst.status === 'ok' ? `${gs.length} rounds ✓ [${worst.got}]` : gateText(worst))}</span>`; }
-    return `<div data-l="${i}">${esc(l.text)}${badge}</div>`;
+    const x = l.status === 'note' ? '' : `<button class="xl2" type="button" data-x="${i}" aria-label="Explain this line: ${esc(l.text.slice(0, 40)).replace(/"/g, '&quot;')}">Explain this line</button>`;
+    return `<div data-l="${i}">${esc(l.text)}${badge}${x}</div>`;
   }).join('');
 }
 function initPaste() {
   pasteSetInit();
   $('pasteGo').onclick = pasteFresh;
   $('pasteEx').onclick = e => { e.preventDefault(); pasteExample(); };
+  $('pasteEx2').onclick = e => { e.preventDefault(); pasteExample2(); };
   $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteFresh(); } });
 }
