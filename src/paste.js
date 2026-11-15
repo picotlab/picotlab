@@ -34,13 +34,18 @@ function pasteDetect(res) {
   return out;
 }
 var PASTE_OV = null;
-function pasteChange() {
-  const y = S.spec.yarn, h = S.spec.hook;
-  $('pasteNote').insertAdjacentHTML('beforeend', `<div class="fields" style="margin-top:6px"><label><span>Yarn weight</span><select id="pasteYarn">${YARN.map(e => `<option value="${e.n}"${e.n === y ? ' selected' : ''}>${e.n} ${esc(e.name)}</option>`).join('')}</select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5" value="${h}"></label></div>`);
+var PASTE_SET_OPEN = false;
+// the yarn and hook pickers sit outside #pasteNote (which every read rewrites); changing either re-reads the pasted text
+function pasteSetFill(yarn, hook) {
+  const sel = $('pasteYarn'); if (!sel.options.length) sel.innerHTML = YARN.map(e => `<option value="${e.n}">${e.n} ${esc(e.name)}</option>`).join('');
+  sel.value = String(yarn); $('pasteHook').value = hook; $('pasteSet').hidden = !PASTE_SET_OPEN;
+}
+function pasteSetInit() {
   const go = () => { PASTE_OV = { yarn: +$('pasteYarn').value, hook: +$('pasteHook').value || null }; pasteRead(); };
   $('pasteYarn').onchange = () => { $('pasteHook').value = YARN[+$('pasteYarn').value].hook; go(); }; $('pasteHook').onchange = go;
 }
-function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; PASTE_OV = null; pasteRead(); }
+function pasteFresh() { PASTE_OV = null; PASTE_SET_OPEN = false; pasteRead(); } // a newly pasted pattern drops any earlier yarn/hook override
+function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; pasteFresh(); }
 const PASTE_EXAMPLE = `Pocket Ball (an original practice pattern)
 Yarn: DK weight (3)
 Hook: 3.5 mm
@@ -84,9 +89,12 @@ function pasteRead() {
   $('pattern').value = text; $('warns').innerHTML = res.warns.map(w => `<div>${esc(w)}</div>`).join('');
   $('pieceTitle').textContent = 'Pasted pattern'; $('patNote').textContent = joined ? 'joined rounds' : 'spiral rounds';
   const n = { ok: 0, bad: 0, none: 0, human: 0 }; gates.forEach(G => n[G.status]++);
-  const humanLines = res.lines.filter(l => l.status === 'unread').length;
-  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanLines ? `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.` : 'Every line was read.'} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <a href="#" id="pasteChg">change</a>`;
-  $('pasteChg').onclick = e => { e.preventDefault(); e.target.remove(); pasteChange(); };
+  const looseLines = res.lines.filter(l => l.status === 'unread').length, humanLines = n.human + looseLines; // a round line the reader found no stitches in counts too
+  const standIn = assumed.filter(x => x === 'count').length, carried = assumed.filter(x => x === 'carry').length;
+  const humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human${standIn ? `, ${standIn === 1 ? 'one' : standIn} drawn from ${standIn === 1 ? 'its' : 'their'} printed count` : ''}${carried ? `, ${carried === 1 ? 'one' : carried} kept at the round before` : ''}.`;
+  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  pasteSetFill(yarn, hook);
+  $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
   updateGo('your pattern');
   W.playing = false; $('wPlay').textContent = 'Play';
   if (!W.on) walkToggle(true); else { W.i = 0; walkSetup(); }
@@ -121,7 +129,8 @@ function pastedLinesHTML(P) {
   }).join('');
 }
 function initPaste() {
-  $('pasteGo').onclick = () => { PASTE_OV = null; pasteRead(); };
+  pasteSetInit();
+  $('pasteGo').onclick = pasteFresh;
   $('pasteEx').onclick = e => { e.preventDefault(); pasteExample(); };
-  $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteRead(); } });
+  $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteFresh(); } });
 }

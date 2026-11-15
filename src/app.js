@@ -25,6 +25,8 @@ function styleList(s) {
 }
 function renderFields() {
   const s = S.spec, f = $('fields'), g = S.g, set = S.raw.set || {};
+  $('specSec').style.display = s.style === 'pasted' ? 'none' : ''; // a pasted pattern has its own yarn/hook pickers by the paste box
+  if (s.style === 'pasted') { f.innerHTML = ''; return; }
   const cls = k => set[k] ? ' class="from"' : '';
   const sel = (k, label, opts, val, wide) => `<label${wide ? ' class="wide"' : ''}><span${cls(k)}>${label}</span><select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
   const num = (k, label, val, step = 0.5, ph = '') => `<label><span${cls(k)}>${label}</span><input type="number" data-k="${k}" step="${step}" min="0" value="${val == null ? '' : val}" placeholder="${ph}"></label>`;
@@ -311,8 +313,9 @@ function drawSchematic() {
     const m = roundsSummary(c, D.st, D.g, s);
     label(hat ? `${r1(m.brimC)} cm around` : `${r1(m.widest / Math.PI)} cm across`, cx, h - 6);
     if (D.pasted) { const A = D.pasted.assumed || [], nm = k => A.map((x, i) => x === k ? 'R' + (i + 1) : '').filter(Boolean).join(', '), a1 = nm('count'), a2 = nm('carry');
-      if (a1) label(`dashed: ${a1} drawn from the printed count`, 6, 28, 'left');
-      if (a2) label(`dashed: ${a2} has no printed count, kept at the round before`, 6, a1 ? 42 : 28, 'left'); }
+      let ly = 28; const wrap = t => { let line = ''; for (const wd of t.split(' ')) { const nx = line ? line + ' ' + wd : wd; if (line && g.measureText(nx).width > w - 12) { label(line, 6, ly, 'left'); ly += 13; line = wd; } else line = nx; } if (line) { label(line, 6, ly, 'left'); ly += 13; } };
+      if (a1) wrap(`dashed: ${a1} drawn from the printed count`);
+      if (a2) wrap(`dashed: ${a2} has no printed count, kept at the round before`); }
     label(`${c.length} rounds`, 6, 14, 'left'); label(`${r1(m.depth)} cm worked`, w - 6, 14, 'right');
     return;
   }

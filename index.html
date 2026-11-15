@@ -36,6 +36,7 @@ h2{font-family:var(--display);font-size:15px;font-weight:700;margin:0}
 .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .val{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
 .btns{display:flex;gap:8px;flex-wrap:wrap}
+a{color:var(--fit)}
 button.btn{font:600 13px var(--body);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--ink);cursor:pointer}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;flex:1}
 button.primary.running{background:var(--ink);color:var(--panel)}
@@ -197,8 +198,9 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
     <div class="sec" id="pasteSec">
       <label class="lbl" for="pasteBox">Or paste a pattern to walk through</label>
       <textarea id="pasteBox" spellcheck="false" placeholder="R1: 6 sc in a magic ring [6]&#10;R2: inc in each st around [12]&#10;R3: (sc, inc) x6 [18]"></textarea>
-      <div class="btns"><button class="btn primary" id="pasteGo">Read it and walk me through</button> <a href="#" id="pasteEx" class="note">Try an example</a></div>
+      <div class="btns"><button class="btn primary" id="pasteGo">Read it and walk me through</button> <button class="btn" id="pasteEx" type="button">Try an example</button></div>
       <div class="note" id="pasteNote">Patterns worked in rounds. Each round's printed count is checked; lines the reader can't follow become “needs a human” steps.</div>
+      <div class="fields" id="pasteSet" hidden style="margin-top:8px"><label><span>Yarn weight</span><select id="pasteYarn"></select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5"></label></div>
     </div>
     <details id="photoSec">
       <summary>Or start from a photo</summary>
@@ -217,7 +219,7 @@ details p{margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:65ch}
       <div class="row"><h2>Your gauge</h2><button class="btn" id="calBtn" style="padding:6px 12px">Calibrate</button></div>
       <div class="note" id="calChip"></div>
     </div>
-    <div class="sec">
+    <div class="sec" id="specSec">
       <div class="row"><h2>Spec</h2><span class="note"><span class="from">blue</span> = from your words</span></div>
       <div class="fields" id="fields"></div>
     </div>
@@ -1360,6 +1362,8 @@ function styleList(s) {
 }
 function renderFields() {
   const s = S.spec, f = $('fields'), g = S.g, set = S.raw.set || {};
+  $('specSec').style.display = s.style === 'pasted' ? 'none' : ''; // a pasted pattern has its own yarn/hook pickers by the paste box
+  if (s.style === 'pasted') { f.innerHTML = ''; return; }
   const cls = k => set[k] ? ' class="from"' : '';
   const sel = (k, label, opts, val, wide) => `<label${wide ? ' class="wide"' : ''}><span${cls(k)}>${label}</span><select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
   const num = (k, label, val, step = 0.5, ph = '') => `<label><span${cls(k)}>${label}</span><input type="number" data-k="${k}" step="${step}" min="0" value="${val == null ? '' : val}" placeholder="${ph}"></label>`;
@@ -1646,8 +1650,9 @@ function drawSchematic() {
     const m = roundsSummary(c, D.st, D.g, s);
     label(hat ? `${r1(m.brimC)} cm around` : `${r1(m.widest / Math.PI)} cm across`, cx, h - 6);
     if (D.pasted) { const A = D.pasted.assumed || [], nm = k => A.map((x, i) => x === k ? 'R' + (i + 1) : '').filter(Boolean).join(', '), a1 = nm('count'), a2 = nm('carry');
-      if (a1) label(`dashed: ${a1} drawn from the printed count`, 6, 28, 'left');
-      if (a2) label(`dashed: ${a2} has no printed count, kept at the round before`, 6, a1 ? 42 : 28, 'left'); }
+      let ly = 28; const wrap = t => { let line = ''; for (const wd of t.split(' ')) { const nx = line ? line + ' ' + wd : wd; if (line && g.measureText(nx).width > w - 12) { label(line, 6, ly, 'left'); ly += 13; line = wd; } else line = nx; } if (line) { label(line, 6, ly, 'left'); ly += 13; } };
+      if (a1) wrap(`dashed: ${a1} drawn from the printed count`);
+      if (a2) wrap(`dashed: ${a2} has no printed count, kept at the round before`); }
     label(`${c.length} rounds`, 6, 14, 'left'); label(`${r1(m.depth)} cm worked`, w - 6, 14, 'right');
     return;
   }
@@ -2363,13 +2368,18 @@ function pasteDetect(res) {
   return out;
 }
 var PASTE_OV = null;
-function pasteChange() {
-  const y = S.spec.yarn, h = S.spec.hook;
-  $('pasteNote').insertAdjacentHTML('beforeend', `<div class="fields" style="margin-top:6px"><label><span>Yarn weight</span><select id="pasteYarn">${YARN.map(e => `<option value="${e.n}"${e.n === y ? ' selected' : ''}>${e.n} ${esc(e.name)}</option>`).join('')}</select></label><label><span>Hook (mm)</span><input type="number" id="pasteHook" step="0.25" min="1.5" value="${h}"></label></div>`);
+var PASTE_SET_OPEN = false;
+// the yarn and hook pickers sit outside #pasteNote (which every read rewrites); changing either re-reads the pasted text
+function pasteSetFill(yarn, hook) {
+  const sel = $('pasteYarn'); if (!sel.options.length) sel.innerHTML = YARN.map(e => `<option value="${e.n}">${e.n} ${esc(e.name)}</option>`).join('');
+  sel.value = String(yarn); $('pasteHook').value = hook; $('pasteSet').hidden = !PASTE_SET_OPEN;
+}
+function pasteSetInit() {
   const go = () => { PASTE_OV = { yarn: +$('pasteYarn').value, hook: +$('pasteHook').value || null }; pasteRead(); };
   $('pasteYarn').onchange = () => { $('pasteHook').value = YARN[+$('pasteYarn').value].hook; go(); }; $('pasteHook').onchange = go;
 }
-function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; PASTE_OV = null; pasteRead(); }
+function pasteFresh() { PASTE_OV = null; PASTE_SET_OPEN = false; pasteRead(); } // a newly pasted pattern drops any earlier yarn/hook override
+function pasteExample() { $('pasteBox').value = PASTE_EXAMPLE; pasteFresh(); }
 const PASTE_EXAMPLE = `Pocket Ball (an original practice pattern)
 Yarn: DK weight (3)
 Hook: 3.5 mm
@@ -2413,9 +2423,12 @@ function pasteRead() {
   $('pattern').value = text; $('warns').innerHTML = res.warns.map(w => `<div>${esc(w)}</div>`).join('');
   $('pieceTitle').textContent = 'Pasted pattern'; $('patNote').textContent = joined ? 'joined rounds' : 'spiral rounds';
   const n = { ok: 0, bad: 0, none: 0, human: 0 }; gates.forEach(G => n[G.status]++);
-  const humanLines = res.lines.filter(l => l.status === 'unread').length;
-  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanLines ? `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human.` : 'Every line was read.'} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <a href="#" id="pasteChg">change</a>`;
-  $('pasteChg').onclick = e => { e.preventDefault(); e.target.remove(); pasteChange(); };
+  const looseLines = res.lines.filter(l => l.status === 'unread').length, humanLines = n.human + looseLines; // a round line the reader found no stitches in counts too
+  const standIn = assumed.filter(x => x === 'count').length, carried = assumed.filter(x => x === 'carry').length;
+  const humanNote = !humanLines ? 'Every line was read.' : `<b>${humanLines}</b> line${humanLines === 1 ? '' : 's'} need${humanLines === 1 ? 's' : ''} a human${standIn ? `, ${standIn === 1 ? 'one' : standIn} drawn from ${standIn === 1 ? 'its' : 'their'} printed count` : ''}${carried ? `, ${carried === 1 ? 'one' : carried} kept at the round before` : ''}.`;
+  $('pasteNote').innerHTML = `Read ${counts.length} round${counts.length === 1 ? '' : 's'}: <b>${n.ok}</b> match their printed count, <b>${n.bad}</b> ${n.bad === 1 ? 'does' : 'do'} not, ${n.none} print none. ${humanNote} ${found ? `Sized for ${YARN[yarn].name.toLowerCase()} yarn on a ${hook} mm hook${ov.yarn != null ? '' : ', from the pattern'}.` : `<b>Assumed ${YARN[yarn].name.toLowerCase()}, ${hook} mm</b> (the pattern names no yarn).`} <button class="btn" type="button" id="pasteChg" style="display:block;margin-top:6px">Change</button>`;
+  pasteSetFill(yarn, hook);
+  $('pasteChg').onclick = () => { PASTE_SET_OPEN = !PASTE_SET_OPEN; $('pasteSet').hidden = !PASTE_SET_OPEN; };
   updateGo('your pattern');
   W.playing = false; $('wPlay').textContent = 'Play';
   if (!W.on) walkToggle(true); else { W.i = 0; walkSetup(); }
@@ -2450,9 +2463,10 @@ function pastedLinesHTML(P) {
   }).join('');
 }
 function initPaste() {
-  $('pasteGo').onclick = () => { PASTE_OV = null; pasteRead(); };
+  pasteSetInit();
+  $('pasteGo').onclick = pasteFresh;
   $('pasteEx').onclick = e => { e.preventDefault(); pasteExample(); };
-  $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteRead(); } });
+  $('pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pasteFresh(); } });
 }
 
 // ---------- walkthrough: work the pattern on screen, stitch by stitch ----------
