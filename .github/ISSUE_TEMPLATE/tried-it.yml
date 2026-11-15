@@ -1,0 +1,64 @@
+name: I tried it
+description: Tell us how Picotlab worked for you.
+title: "I tried it: "
+labels: ["tester"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Picotlab. Please paste only your own text, or a line short enough to quote.
+        Do not paste whole copyrighted patterns.
+  - type: textarea
+    id: pasted
+    attributes:
+      label: What did you paste?
+      description: A line or a pattern. Only your own text, or a line short enough to quote.
+    validations:
+      required: true
+  - type: dropdown
+    id: helped
+    attributes:
+      label: Did it help you get past it?
+      options:
+        - "Yes"
+        - Partly
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: instead
+    attributes:
+      label: What did you do instead (or as well)?
+      multiple: true
+      options:
+        - PDF
+        - Video
+        - Forum
+        - Asked someone
+        - Other
+  - type: dropdown
+    id: again
+    attributes:
+      label: Would you use it again next time you're stuck?
+      options:
+        - "Yes"
+        - Maybe
+        - "No"
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: Anything wrong or confusing?
+  - type: input
+    id: yarn
+    attributes:
+      label: Yarn (optional)
+  - type: input
+    id: hook
+    attributes:
+      label: Hook (optional)
+  - type: input
+    id: design
+    attributes:
+      label: For a design, predicted vs measured size in cm (optional)
