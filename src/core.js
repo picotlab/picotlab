@@ -1076,7 +1076,8 @@ function parseGranny(text) {
   }
   let below = null; const bodyOf = {}; let ringNote = null;
   for (const e of entries) {
-    if (e.start && !/\b(?:sc|hdc|dc|tr)\b/i.test(e.body)) { ringNote = e; continue; } // "Ch 4, sl st to form a ring"
+    const chainOpener = !ringNote && !rounds.length && below == null && !/\b(?:sc|hdc|dc|tr)\b/i.test(e.body) && /^\s*ch(?:ain)?\s*\d+\b/i.test(e.body) && /\b(?:join|sl\s*st|ss|slip\s*st)/i.test(e.body); /* "Round 1: ch 4, join to form a ring": the ring itself, with no stitches */
+    if ((e.start || chainOpener) && !/\b(?:sc|hdc|dc|tr)\b/i.test(e.body)) { ringNote = e; continue; } // "Ch 4, sl st to form a ring"
     let body = e.body;
     if (e.start) e.a = e.b = 1;
     const br = body.match(/^\s*(?:rep(?:eat)?|work)\s+(?:as\s+(?:for\s+)?)?(?:r(?:nd|ound)?s?)\s*(\d+)\b\.?/i);
@@ -1592,7 +1593,7 @@ const EX_TERMS = [
     means: 'A magic ring (adjustable ring) is a loop you work the first round into, then pull the tail to close the centre.' },
 ];
 function exTerms(text) { return EX_TERMS.filter(t => t.re.test(text)).map(t => ({ id: t.id, name: t.name, means: t.means })); }
-const EX_FILL = new Set(['in', 'into', 'the', 'a', 'and', 'then', 'to', 'of', 'next', 'with', 'work', 'working', 'make', 'on', 'at', 'from', 'more', 'all', 'it', 'st', 'sts', 'stitch', 'stitches', 'hook', 'ring', 'row', 'rows', 'round', 'rounds', 'rnd', 'rnds', 'r', 'beg', 'times', 'time', 'this', 'that', 'each', 'first', 'last', 'x', 'once', 'again', 'as', 'over', 'is', 'are', 'mr', 'magic', 'loop', 'circle', 'now', 'throughout', 'for', 'rs', 'ws', 'side', 'wrong', 'right', 'total', 'rep', 'repeat', 'end', 'across', 'around', 'even', 'fasten', 'off', 'cut', 'yarn', 'tail', 'same', 'every', 'just', 'only', 'chain', 'chains', 'ch', 'between', 'joining', 'join', 'previous', 'sp', 'space', 'shell', 'shells', 'corner', 'granny', 'sl', 'back', 'front', 'center', 'centre', 'turn', 'turning', 'worked', 'working', 'up', 'down', 'do', 'not', 'rep', 'loosely', 'tightly', 'firmly', 'evenly', 'carefully', 'slowly', 'gently', 'loose', 'tight', 'foundation', 'beginning', 'start', 'starting', 'finish', 'finishing']);
+const EX_FILL = new Set(['in', 'into', 'the', 'a', 'and', 'then', 'to', 'of', 'next', 'with', 'work', 'working', 'make', 'on', 'at', 'from', 'more', 'all', 'it', 'st', 'sts', 'stitch', 'stitches', 'hook', 'ring', 'row', 'rows', 'round', 'rounds', 'rnd', 'rnds', 'r', 'beg', 'times', 'time', 'this', 'that', 'each', 'first', 'last', 'x', 'once', 'again', 'as', 'over', 'is', 'are', 'mr', 'magic', 'loop', 'circle', 'now', 'throughout', 'for', 'rs', 'ws', 'side', 'wrong', 'right', 'total', 'rep', 'repeat', 'end', 'across', 'around', 'even', 'fasten', 'off', 'cut', 'yarn', 'tail', 'same', 'every', 'just', 'only', 'chain', 'chains', 'ch', 'between', 'joining', 'join', 'previous', 'sp', 'space', 'shell', 'shells', 'corner', 'granny', 'sl', 'back', 'front', 'center', 'centre', 'turn', 'turning', 'worked', 'working', 'up', 'down', 'do', 'not', 'rep', 'loosely', 'tightly', 'firmly', 'evenly', 'carefully', 'slowly', 'gently', 'loose', 'tight', 'foundation', 'beginning', 'start', 'starting', 'finish', 'finishing', 'form', 'forming']);
 function exStrip(raw) { // the printed count is a check, not an instruction
   return String(raw).replace(COUNT_RE, ' ').replace(/(?::\s*|\s[-–—]\s*)\d+\s*(?:stitch(?:es)?|sts?|sc|hdc|dc|tr|clusters?|sps?)\s*\.?\s*$/i, ' ').replace(/\(\s*=?\s*\d+\s*(?:[a-z-]+\s*){0,3}(?:(?:,|and|&|\+)\s*\d+\s*(?:[a-z-]+\s*){0,3})+\)(?!\s*(?:x\s*\d|\d|times?\b|in\b|into\b))/gi, ' ');
 }
